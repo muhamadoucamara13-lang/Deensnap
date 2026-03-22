@@ -1,0 +1,8 @@
+{
+  "name": "DeenSnap",
+  "description": "AI-powered Halal food scanner with user accounts and offline support. Scan barcodes to check if products are Halal, Haram, or Mushbooh using Gemini AI and OpenFoodFacts. Save your scan history and preferences securely.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
