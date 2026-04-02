@@ -12,32 +12,32 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
+        includeAssets: ['favicon.svg', 'logo.svg', 'logo-192.svg', 'logo-512.svg', 'mask-icon.svg'],
         manifest: {
           name: 'DeenSnap - Halal Scanner',
           short_name: 'DeenSnap',
           description: 'Escanea, analiza y descubre productos Halal con DeenSnap.',
-          theme_color: '#000000',
-          background_color: '#000000',
+          theme_color: '#10b981',
+          background_color: '#050505',
           display: 'standalone',
           orientation: 'portrait',
           scope: '/',
           start_url: '/',
           icons: [
             {
-              src: 'https://picsum.photos/seed/deensnap/192/192',
+              src: 'logo-192.svg',
               sizes: '192x192',
-              type: 'image/png'
+              type: 'image/svg+xml'
             },
             {
-              src: 'https://picsum.photos/seed/deensnap/512/512',
+              src: 'logo-512.svg',
               sizes: '512x512',
-              type: 'image/png'
+              type: 'image/svg+xml'
             },
             {
-              src: 'https://picsum.photos/seed/deensnap/512/512',
+              src: 'logo-512.svg',
               sizes: '512x512',
-              type: 'image/png',
+              type: 'image/svg+xml',
               purpose: 'any maskable'
             }
           ]
