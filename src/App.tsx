@@ -131,6 +131,7 @@ export default function App() {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ text: string, sender: 'user' | 'ai', time: string }[]>([]);
   const [session, setSession] = useState<any>(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   // History Filters Persistence
   const [historySearchQuery, setHistorySearchQuery] = useState(() => localStorage.getItem('deensnap_history_search') || '');
@@ -683,6 +684,12 @@ export default function App() {
       }
     };
 
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
     const handleError = (event: ErrorEvent) => {
       console.error("Global error:", event.error);
       setError(event.error?.message || "Runtime error");
@@ -814,6 +821,8 @@ export default function App() {
     init();
     
     return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
       window.removeEventListener('error', handleError);
       window.removeEventListener('focus', checkPermissions);
     };
@@ -981,6 +990,11 @@ export default function App() {
       }
 
       setLoadingMessage("Consultando base de datos...");
+      
+      if (!navigator.onLine) {
+        throw new Error(t('offline_mode') + ": " + t('error_not_found'));
+      }
+
       const product = await fetchProductFromOFF(barcode);
       
       // Case 1: Product not found in OFF (status 0)
@@ -1105,6 +1119,12 @@ export default function App() {
     setLoading(true);
     setLoadingMessage(t('consulting_ai'));
     setError(null);
+
+    if (!navigator.onLine) {
+      setLoading(false);
+      setError(t('offline_mode') + ": " + t('error_generic'));
+      return;
+    }
 
     try {
       const searchResult = await searchProductByName(name, language);

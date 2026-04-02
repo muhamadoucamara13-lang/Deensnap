@@ -204,6 +204,8 @@ export const translations = {
     sort_ingredients: 'Ingredientes',
     switch_to_front: 'Cámara Frontal',
     switch_to_rear: 'Cámara Trasera',
+    offline_mode: 'Modo Offline',
+    online_mode: 'Modo Online',
   },
   en: {
     home: 'Home',
@@ -407,6 +409,8 @@ export const translations = {
     sort_ingredients: 'Ingredients',
     switch_to_front: 'Front Camera',
     switch_to_rear: 'Rear Camera',
+    offline_mode: 'Offline Mode',
+    online_mode: 'Online Mode',
   },
   fr: {
     home: 'Accueil',
@@ -606,6 +610,8 @@ export const translations = {
     sort_ingredients: 'Ingrédients',
     switch_to_front: 'Caméra Frontale',
     switch_to_rear: 'Caméra Arrière',
+    offline_mode: 'Mode Hors-ligne',
+    online_mode: 'Mode En Ligne',
   },
   ar: {
     home: 'الرئيسية',
@@ -805,5 +811,7 @@ export const translations = {
     sort_ingredients: 'المكونات',
     switch_to_front: 'الكاميرا الأمامية',
     switch_to_rear: 'الكاميرا الخلفية',
+    offline_mode: 'وضع عدم الاتصال',
+    online_mode: 'وضع الاتصال',
   },
 };
