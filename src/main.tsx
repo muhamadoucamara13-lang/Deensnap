@@ -4,6 +4,7 @@ import App from './App.tsx';
 import './index.css';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { PWAProvider } from './contexts/PWAContext';
 
 // Register Service Worker
 /*
@@ -24,7 +25,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <LanguageProvider>
       <ThemeProvider>
-        <App />
+        <PWAProvider>
+          <App />
+        </PWAProvider>
       </ThemeProvider>
     </LanguageProvider>
   </StrictMode>,

@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Menu } from 'lucide-react';
+import { Menu, Smartphone, Download } from 'lucide-react';
 import { Screen } from '../../types';
 import { updateUserProfile } from '../../services/supabase';
+import { usePWA } from '../../contexts/PWAContext';
 
 interface ProfileSettingsScreenProps {
   t: (key: any) => string;
@@ -23,6 +24,8 @@ export const ProfileSettingsScreen = React.memo(({
   setLoading, 
   setLoadingMessage 
 }: ProfileSettingsScreenProps) => {
+  const { isInstallable, isInstalled, installApp } = usePWA();
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -181,6 +184,33 @@ export const ProfileSettingsScreen = React.memo(({
             </div>
           </div>
         </div>
+
+        {/* PWA Install Section */}
+        {isInstallable && !isInstalled && (
+          <div className="p-8 rounded-[3rem] bg-emerald-500/10 border border-emerald-500/20 relative overflow-hidden group">
+            <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-emerald-500/20 blur-[80px] rounded-full" />
+            <div className="relative flex flex-col gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <Smartphone size={24} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-bold font-display tracking-tight">{t('download_app')}</h3>
+                  <p className="text-white/40 text-xs font-medium max-w-[200px] leading-relaxed">
+                    {t('download_app_desc')}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={installApp}
+                className="w-full py-4 rounded-2xl premium-gradient text-white font-bold text-sm shadow-lg shadow-emerald-500/20 active:scale-95 transition-all flex items-center justify-center gap-2"
+              >
+                <Download size={18} />
+                {t('install')}
+              </button>
+            </div>
+          </div>
+        )}
 
         <button 
           onClick={async () => {

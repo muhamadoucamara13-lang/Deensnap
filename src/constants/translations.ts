@@ -206,6 +206,10 @@ export const translations = {
     switch_to_rear: 'Cámara Trasera',
     offline_mode: 'Modo Offline',
     online_mode: 'Modo Online',
+    download_app: 'Descargar App',
+    download_app_desc: 'Instala DeenSnap en tu pantalla de inicio para un acceso rápido y uso offline.',
+    install: 'Instalar',
+    app_installed: 'App Instalada',
   },
   en: {
     home: 'Home',
@@ -411,6 +415,10 @@ export const translations = {
     switch_to_rear: 'Rear Camera',
     offline_mode: 'Offline Mode',
     online_mode: 'Online Mode',
+    download_app: 'Download App',
+    download_app_desc: 'Install DeenSnap on your home screen for quick access and offline use.',
+    install: 'Install',
+    app_installed: 'App Installed',
   },
   fr: {
     home: 'Accueil',
@@ -612,6 +620,10 @@ export const translations = {
     switch_to_rear: 'Caméra Arrière',
     offline_mode: 'Mode Hors-ligne',
     online_mode: 'Mode En Ligne',
+    download_app: 'Télécharger l\'App',
+    download_app_desc: 'Installez DeenSnap sur votre écran d\'accueil pour un accès rapide et une utilisation hors ligne.',
+    install: 'Installer',
+    app_installed: 'App Installée',
   },
   ar: {
     home: 'الرئيسية',
@@ -813,5 +825,9 @@ export const translations = {
     switch_to_rear: 'الكاميرا الخلفية',
     offline_mode: 'وضع عدم الاتصال',
     online_mode: 'وضع الاتصال',
+    download_app: 'تحميل التطبيق',
+    download_app_desc: 'قم بتثبيت DeenSnap على شاشتك الرئيسية للوصول السريع والاستخدام دون اتصال.',
+    install: 'تثبيت',
+    app_installed: 'تم تثبيت التطبيق',
   },
 };
