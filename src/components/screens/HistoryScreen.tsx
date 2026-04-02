@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Trash2, Menu, Search, X, Clock, ArrowRight } from 'lucide-react';
+import { Trash2, Menu, Search, X, Clock, ArrowRight, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Screen } from '../../types';
 import { statusConfig } from '../../constants/statusConfig';
@@ -11,6 +11,7 @@ interface HistoryScreenProps {
   setScreen: (s: Screen) => void;
   history: any[];
   handleClearHistory: () => void;
+  handleRefreshHistory: () => void;
   historySearchQuery: string;
   setHistorySearchQuery: (s: string) => void;
   historyStatusFilter: string;
@@ -19,10 +20,12 @@ interface HistoryScreenProps {
   setHistoryStartDateFilter: (s: string) => void;
   historyEndDateFilter: string;
   setHistoryEndDateFilter: (s: string) => void;
+  historyIngredientsFilter: string;
+  setHistoryIngredientsFilter: (s: string) => void;
   historySortBy: string;
   setHistorySortBy: (s: any) => void;
-  historySortOrder: string;
-  setHistorySortOrder: (f: (prev: any) => any) => void;
+  historySortOrder: 'asc' | 'desc';
+  setHistorySortOrder: (s: 'asc' | 'desc' | ((prev: 'asc' | 'desc') => 'asc' | 'desc')) => void;
   filteredHistory: any[];
   setLoading: (l: boolean) => void;
   setLoadingMessage: (m: string) => void;
@@ -35,6 +38,7 @@ export const HistoryScreen = React.memo(({
   setScreen, 
   history, 
   handleClearHistory, 
+  handleRefreshHistory,
   historySearchQuery, 
   setHistorySearchQuery, 
   historyStatusFilter, 
@@ -43,6 +47,8 @@ export const HistoryScreen = React.memo(({
   setHistoryStartDateFilter, 
   historyEndDateFilter, 
   setHistoryEndDateFilter, 
+  historyIngredientsFilter,
+  setHistoryIngredientsFilter,
   historySortBy, 
   setHistorySortBy, 
   historySortOrder, 
@@ -53,6 +59,8 @@ export const HistoryScreen = React.memo(({
   setCurrentProduct, 
   handleDeleteHistoryEntry 
 }: HistoryScreenProps) => {
+  const [showFilters, setShowFilters] = React.useState(false);
+
   return (
     <motion.div 
       initial={{ opacity: 0, x: 20 }}
@@ -63,6 +71,13 @@ export const HistoryScreen = React.memo(({
       <div className="flex items-center justify-between mb-8 pt-6">
         <h1 className="text-4xl font-bold font-display tracking-tight">{t('history')}</h1>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={handleRefreshHistory}
+            className="p-3 rounded-2xl glass-button text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+            title="Refrescar historial"
+          >
+            <RefreshCw size={20} />
+          </button>
           {history.length > 0 && (
             <button 
               onClick={handleClearHistory}
@@ -80,93 +95,148 @@ export const HistoryScreen = React.memo(({
 
       {/* Filtros de Historial */}
       <div className="mb-8 space-y-4">
-        <div className="relative">
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
-          <input 
-            type="text"
-            placeholder={t('search_history_placeholder')}
-            value={historySearchQuery}
-            onChange={(e) => setHistorySearchQuery(e.target.value)}
-            className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-sm focus:outline-none focus:border-emerald-500/50 transition-all"
-          />
-          {historySearchQuery && (
-            <button 
-              onClick={() => setHistorySearchQuery('')}
-              className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
-            >
-              <X size={16} />
-            </button>
-          )}
+        <div className="flex gap-3">
+          <div className="relative flex-1">
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={18} />
+            <input 
+              type="text"
+              placeholder={t('search_history_placeholder')}
+              value={historySearchQuery}
+              onChange={(e) => setHistorySearchQuery(e.target.value)}
+              className="w-full bg-white/[0.03] border border-white/10 rounded-2xl py-4 pl-12 pr-12 text-sm focus:outline-none focus:border-emerald-500/50 transition-all"
+            />
+            {historySearchQuery && (
+              <button 
+                onClick={() => setHistorySearchQuery('')}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+          <button 
+            onClick={() => setShowFilters(!showFilters)}
+            className={cn(
+              "p-4 rounded-2xl border transition-all",
+              showFilters 
+                ? "bg-emerald-500 border-emerald-500 text-white" 
+                : "bg-white/[0.03] border-white/10 text-white/40 hover:border-white/20"
+            )}
+          >
+            <Clock size={20} className={showFilters ? "rotate-180 transition-transform" : "transition-transform"} />
+          </button>
         </div>
         
-        <div className="flex gap-3 overflow-x-auto pb-2 scrollbar-none">
-          {(['ALL', 'HALAL', 'HARAM', 'DUDOSO'] as const).map((status) => (
-            <button
-              key={status}
-              onClick={() => setHistoryStatusFilter(status)}
-              className={cn(
-                "px-5 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all border",
-                historyStatusFilter === status 
-                  ? "bg-white text-black border-white" 
-                  : "bg-white/5 text-white/40 border-white/5 hover:border-white/20"
-              )}
-            >
-              {status === 'ALL' ? 'Todos' : status}
-            </button>
-          ))}
-          <div className="flex items-center gap-2">
-            <input 
-              type="date"
-              value={historyStartDateFilter}
-              onChange={(e) => setHistoryStartDateFilter(e.target.value)}
-              className="bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs text-white/40 focus:outline-none focus:border-white/20"
-              title="Fecha Inicio"
-            />
-            <span className="text-white/20 text-xs">-</span>
-            <input 
-              type="date"
-              value={historyEndDateFilter}
-              onChange={(e) => setHistoryEndDateFilter(e.target.value)}
-              className="bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs text-white/40 focus:outline-none focus:border-white/20"
-              title="Fecha Fin"
-            />
-          </div>
-        </div>
+        {showFilters && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            className="p-6 rounded-[2rem] bg-white/[0.02] border border-white/5 space-y-6 overflow-hidden"
+          >
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-white/20 px-1">Estado</label>
+              <div className="flex flex-wrap gap-2">
+                {(['ALL', 'HALAL', 'HARAM', 'DUDOSO'] as const).map((status) => (
+                  <button
+                    key={status}
+                    onClick={() => setHistoryStatusFilter(status)}
+                    className={cn(
+                      "px-4 py-2 rounded-xl text-[10px] font-bold whitespace-nowrap transition-all border",
+                      historyStatusFilter === status 
+                        ? "bg-emerald-500 text-white border-emerald-500 shadow-lg shadow-emerald-500/20" 
+                        : "bg-white/5 text-white/40 border-white/5 hover:border-white/10"
+                    )}
+                  >
+                    {status === 'ALL' ? 'Todos' : status}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <div className="flex items-center justify-between px-2">
-          <div className="flex items-center gap-4">
-            <select 
-              value={historySortBy}
-              onChange={(e) => setHistorySortBy(e.target.value as any)}
-              className="bg-transparent text-[10px] font-bold uppercase tracking-widest text-white/40 focus:outline-none"
-            >
-              <option value="date">{t('sort_date')}</option>
-              <option value="name">{t('sort_name')}</option>
-              <option value="status">{t('sort_status')}</option>
-              <option value="ingredients">{t('sort_ingredients')}</option>
-            </select>
-            <button 
-              onClick={() => setHistorySortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
-              className="text-[10px] font-bold uppercase tracking-widest text-emerald-400"
-            >
-              {historySortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
-            </button>
-          </div>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-white/20">
-            {filteredHistory.length} resultados
-            {(historySearchQuery || historyStartDateFilter || historyEndDateFilter || historyStatusFilter !== 'ALL') && (
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-white/20 px-1">Fecha Inicio</label>
+                <input 
+                  type="date"
+                  value={historyStartDateFilter}
+                  onChange={(e) => setHistoryStartDateFilter(e.target.value)}
+                  className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500/30"
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="text-[10px] font-bold uppercase tracking-widest text-white/20 px-1">Fecha Fin</label>
+                <input 
+                  type="date"
+                  value={historyEndDateFilter}
+                  onChange={(e) => setHistoryEndDateFilter(e.target.value)}
+                  className="w-full bg-white/5 border border-white/5 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-emerald-500/30"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-[10px] font-bold uppercase tracking-widest text-white/20 px-1">Ingredientes</label>
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20" size={14} />
+                <input 
+                  type="text"
+                  placeholder="Filtrar por ingredientes..."
+                  value={historyIngredientsFilter}
+                  onChange={(e) => setHistoryIngredientsFilter(e.target.value)}
+                  className="w-full bg-white/5 border border-white/5 rounded-xl py-3 pl-10 pr-4 text-xs text-white focus:outline-none focus:border-emerald-500/30"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
               <button 
                 onClick={() => {
                   setHistorySearchQuery('');
                   setHistoryStatusFilter('ALL');
                   setHistoryStartDateFilter('');
                   setHistoryEndDateFilter('');
+                  setHistoryIngredientsFilter('');
+                  setHistorySortBy('date');
+                  setHistorySortOrder('desc');
                 }}
-                className="ml-2 text-emerald-400 hover:underline"
+                className="text-[10px] font-bold uppercase tracking-widest text-rose-500 hover:underline"
               >
-                Limpiar
+                Restablecer Filtros
               </button>
-            )}
+              <button 
+                onClick={() => setShowFilters(false)}
+                className="text-[10px] font-bold uppercase tracking-widest text-emerald-400"
+              >
+                Aplicar
+              </button>
+            </div>
+          </motion.div>
+        )}
+
+        <div className="flex items-center justify-between px-2">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-white/20">Ordenar por:</span>
+              <select 
+                value={historySortBy}
+                onChange={(e) => setHistorySortBy(e.target.value as any)}
+                className="bg-transparent text-[10px] font-bold uppercase tracking-widest text-emerald-400 focus:outline-none cursor-pointer"
+              >
+                <option value="date">{t('sort_date')}</option>
+                <option value="name">{t('sort_name')}</option>
+                <option value="status">{t('sort_status')}</option>
+                <option value="ingredients">{t('sort_ingredients')}</option>
+              </select>
+            </div>
+            <button 
+              onClick={() => setHistorySortOrder(prev => prev === 'asc' ? 'desc' : 'asc')}
+              className="flex items-center gap-1 text-[10px] font-bold uppercase tracking-widest text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full"
+            >
+              {historySortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
+            </button>
+          </div>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-white/20">
+            {filteredHistory.length} resultados
           </span>
         </div>
       </div>

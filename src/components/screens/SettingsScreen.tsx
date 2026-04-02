@@ -59,28 +59,6 @@ export const SettingsScreen = React.memo(({
           </div>
         </div>
 
-        {/* Settings Groups */}
-        <div className="space-y-4">
-          <div className="px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">Premios</div>
-          <div className="p-2 rounded-[2.5rem] glass-card border-white/5 space-y-1">
-            <button 
-              onClick={() => setScreen('rewards')}
-              className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors group"
-            >
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-400">
-                  <Trophy size={20} />
-                </div>
-                <div className="text-left">
-                  <span className="block font-bold tracking-tight">Premios y Recompensas</span>
-                  <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-widest">{userProfile?.points || 0} Puntos Disponibles</span>
-                </div>
-              </div>
-              <ArrowRight size={18} className="text-white/10 group-hover:text-white/40 transition-all group-hover:translate-x-1" />
-            </button>
-          </div>
-        </div>
-
         <div className="space-y-4">
           <div className="px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{t('preferences')}</div>
           <div className="p-2 rounded-[2.5rem] glass-card border-white/5 space-y-1">

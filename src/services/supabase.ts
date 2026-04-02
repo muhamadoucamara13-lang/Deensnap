@@ -47,7 +47,9 @@ export interface UserProfile {
   carbs_target?: number;
   alerts?: string[];
   plan?: string;
-  points?: number;
+  is_premium?: boolean;
+  premium_since?: string;
+  stripe_customer_id?: string;
   created_at?: string;
 }
 
@@ -86,6 +88,16 @@ export interface Favorite {
 }
 
 export async function getSavedProduct(barcode: string): Promise<SavedProduct | null> {
+  // Check local storage first
+  try {
+    const localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
+    if (localProducts[barcode]) {
+      return localProducts[barcode];
+    }
+  } catch (e) {
+    console.error("Error reading local products:", e);
+  }
+
   if (!supabase) return null;
   
   const timeoutPromise = new Promise((_, reject) => 
@@ -101,6 +113,14 @@ export async function getSavedProduct(barcode: string): Promise<SavedProduct | n
       
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]) as any;
     if (error || !data) return null;
+    
+    // Cache to local storage
+    try {
+      const localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
+      localProducts[barcode] = data;
+      localStorage.setItem('deensnap_products', JSON.stringify(localProducts));
+    } catch (e) {}
+
     return data;
   } catch (err) {
     console.error("Supabase read error or timeout:", err);
@@ -109,6 +129,15 @@ export async function getSavedProduct(barcode: string): Promise<SavedProduct | n
 }
 
 export async function saveProduct(product: SavedProduct) {
+  // Save to local storage first
+  try {
+    const localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
+    localProducts[product.barcode] = product;
+    localStorage.setItem('deensnap_products', JSON.stringify(localProducts));
+  } catch (e) {
+    console.error("Error saving to local products:", e);
+  }
+
   if (!supabase) return;
   
   console.log(`Supabase: Intentando guardar producto barcode=${product.barcode}, name=${product.name}`);
@@ -124,7 +153,7 @@ export async function saveProduct(product: SavedProduct) {
       
     const { error } = await Promise.race([upsertPromise, timeoutPromise]) as any;
     if (error) {
-      console.error("Supabase: Error guardando producto:", error.message, error.details, error.hint);
+      console.error("Supabase: Error guardando producto:", error.message);
     } else {
       console.log("Supabase: Producto guardado correctamente");
     }
@@ -168,26 +197,6 @@ export async function updateUserProfile(profile: Partial<UserProfile>) {
   }
 }
 
-export async function addPoints(userId: string, amount: number) {
-  if (!supabase) return;
-  try {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('points')
-      .eq('id', userId)
-      .single();
-    
-    const currentPoints = profile?.points || 0;
-    const { error } = await supabase
-      .from('profiles')
-      .update({ points: currentPoints + amount })
-      .eq('id', userId);
-      
-    if (error) throw error;
-  } catch (err) {
-    console.error("Error adding points:", err);
-  }
-}
 
 export interface MealEntry {
   id?: string;
@@ -216,8 +225,21 @@ export async function logMeal(meal: MealEntry) {
 }
 
 export async function saveScanToHistory(userId: string, barcode: string) {
+  // Save to local storage first as a fallback
+  try {
+    const localHistory = JSON.parse(localStorage.getItem('deensnap_history') || '[]');
+    const newEntry = {
+      product_barcode: barcode,
+      scanned_at: new Date().toISOString(),
+      user_id: userId
+    };
+    localStorage.setItem('deensnap_history', JSON.stringify([newEntry, ...localHistory].slice(0, 100)));
+  } catch (e) {
+    console.error("Error saving to local history:", e);
+  }
+
   if (!supabase) {
-    console.warn("Supabase not initialized, cannot save history");
+    console.warn("Supabase not initialized, saved to local history only");
     return;
   }
   
@@ -230,15 +252,13 @@ export async function saveScanToHistory(userId: string, barcode: string) {
       scanned_at: new Date().toISOString()
     };
     
-    console.log("Supabase: Insertando entrada en historial:", entry);
-    
     const { data, error } = await supabase
       .from('history')
       .insert(entry)
       .select();
 
     if (error) {
-      console.error("Supabase: Error guardando historial:", error.message, error.details, error.hint);
+      console.error("Supabase: Error guardando historial:", error.message);
     } else {
       console.log("Supabase: Historial guardado correctamente:", data);
     }
@@ -248,52 +268,155 @@ export async function saveScanToHistory(userId: string, barcode: string) {
 }
 
 export async function loadHistory(userId: string) {
-  if (!supabase) return [];
+  let localData: any[] = [];
+  try {
+    localData = JSON.parse(localStorage.getItem('deensnap_history') || '[]');
+    // Filter by user_id if it's not a demo user
+    if (userId !== 'demo-user-id') {
+      localData = localData.filter(item => item.user_id === userId);
+    }
+  } catch (e) {
+    console.error("Error loading local history:", e);
+  }
+
+  if (!supabase) {
+    console.warn("Supabase not initialized, loading from local history");
+    // We still need product details for local history
+    const barcodes = [...new Set(localData.map(h => h.product_barcode))];
+    if (barcodes.length === 0) return [];
+    
+    // Try to get product details from local storage
+    let localProducts: any = {};
+    try {
+      localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
+    } catch (e) {}
+
+    return localData.map(item => {
+      const product = localProducts[item.product_barcode];
+      return {
+        ...item,
+        name: product?.name || `Producto ${item.product_barcode}`,
+        status: product?.status || 'DESCONOCIDO',
+        ingredients: product?.ingredients || '',
+        risk_ingredients: product?.risk_ingredients || []
+      };
+    });
+  }
   
   console.log(`Loading history for user: ${userId}`);
   
-  // Intentamos traer los datos del producto asociados mediante join
-  // Asumimos que product_barcode referencia a products.barcode
-  const { data, error } = await supabase
-    .from('history')
-    .select(`
-      product_barcode, 
-      scanned_at,
-      products:product_barcode (
-        name,
-        status,
-        ingredients,
-        risk_ingredients
-      )
-    `)
-    .eq('user_id', userId)
-    .order('scanned_at', { ascending: false });
-
-  if (error) {
-    console.error("Error cargando historial de Supabase:", error);
-    // Fallback: intentar cargar sin join si falla por falta de relación
-    const { data: fallbackData, error: fallbackError } = await supabase
+  try {
+    // Attempt to fetch history with product details using join
+    const { data, error } = await supabase
       .from('history')
-      .select('product_barcode, scanned_at')
+      .select(`
+        product_barcode, 
+        scanned_at,
+        products:product_barcode (
+          name,
+          status,
+          ingredients,
+          risk_ingredients
+        )
+      `)
       .eq('user_id', userId)
       .order('scanned_at', { ascending: false });
-      
-    if (fallbackError) return [];
-    return fallbackData || [];
-  }
-  
-  // Aplanamos la estructura para que sea más fácil de usar
-  const formattedData = (data || []).map((item: any) => ({
-    product_barcode: item.product_barcode,
-    scanned_at: item.scanned_at,
-    name: item.products?.name || `Producto ${item.product_barcode}`,
-    status: item.products?.status || 'DESCONOCIDO',
-    ingredients: item.products?.ingredients || '',
-    risk_ingredients: item.products?.risk_ingredients || []
-  }));
 
-  console.log(`Loaded ${formattedData.length} history entries from Supabase`);
-  return formattedData;
+    if (error) {
+      console.error("Error loading history with join:", error);
+      // Fallback: fetch history first, then products
+      const { data: historyData, error: historyError } = await supabase
+        .from('history')
+        .select('product_barcode, scanned_at')
+        .eq('user_id', userId)
+        .order('scanned_at', { ascending: false });
+        
+      if (historyError || !historyData) return localData;
+      
+      // Fetch unique product details for these barcodes
+      const barcodes = [...new Set(historyData.map(h => h.product_barcode))];
+      if (barcodes.length === 0) return [];
+      
+      const { data: productsData } = await supabase
+        .from('products')
+        .select('barcode, name, status, ingredients, risk_ingredients')
+        .in('barcode', barcodes);
+        
+      const productMap = new Map(productsData?.map(p => [p.barcode, p]) || []);
+      
+      const remoteHistory = historyData.map(item => {
+        const product = productMap.get(item.product_barcode);
+        return {
+          product_barcode: item.product_barcode,
+          scanned_at: item.scanned_at,
+          name: product?.name || `Producto ${item.product_barcode}`,
+          status: product?.status || 'DESCONOCIDO',
+          ingredients: product?.ingredients || '',
+          risk_ingredients: product?.risk_ingredients || []
+        };
+      });
+
+      // Try to get product details from local storage for local history
+      let localProducts: any = {};
+      try {
+        localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
+      } catch (e) {}
+
+      // Merge local and remote, avoiding duplicates
+      const merged = [...remoteHistory];
+      localData.forEach(localItem => {
+        if (!merged.some(remoteItem => remoteItem.product_barcode === localItem.product_barcode && remoteItem.scanned_at === localItem.scanned_at)) {
+          const product = localProducts[localItem.product_barcode];
+          merged.push({
+            ...localItem,
+            name: product?.name || `Producto ${localItem.product_barcode}`,
+            status: product?.status || 'DESCONOCIDO',
+            ingredients: product?.ingredients || '',
+            risk_ingredients: product?.risk_ingredients || []
+          });
+        }
+      });
+      return merged.sort((a, b) => new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime());
+    }
+    
+    // Format data, handling potential array response from join
+    const remoteHistory = (data || []).map((item: any) => {
+      const product = Array.isArray(item.products) ? item.products[0] : item.products;
+      return {
+        product_barcode: item.product_barcode,
+        scanned_at: item.scanned_at,
+        name: product?.name || `Producto ${item.product_barcode}`,
+        status: product?.status || 'DESCONOCIDO',
+        ingredients: product?.ingredients || '',
+        risk_ingredients: product?.risk_ingredients || []
+      };
+    });
+
+    // Try to get product details from local storage for local history
+    let localProducts: any = {};
+    try {
+      localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
+    } catch (e) {}
+
+    // Merge local and remote
+    const merged = [...remoteHistory];
+    localData.forEach(localItem => {
+      if (!merged.some(remoteItem => remoteItem.product_barcode === localItem.product_barcode && remoteItem.scanned_at === localItem.scanned_at)) {
+        const product = localProducts[localItem.product_barcode];
+        merged.push({
+          ...localItem,
+          name: product?.name || `Producto ${localItem.product_barcode}`,
+          status: product?.status || 'DESCONOCIDO',
+          ingredients: product?.ingredients || '',
+          risk_ingredients: product?.risk_ingredients || []
+        });
+      }
+    });
+    return merged.sort((a, b) => new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime());
+  } catch (err) {
+    console.error("Exception loading history:", err);
+    return localData;
+  }
 }
 
 export async function saveHistoryEntry(entry: HistoryEntry) {

@@ -7,12 +7,14 @@ interface PremiumScreenProps {
   t: (key: any) => string;
   setScreen: (s: Screen) => void;
   handleCheckout: (plan: 'monthly' | 'yearly') => void;
+  isPremium: boolean;
 }
 
 export const PremiumScreen = React.memo(({ 
   t, 
   setScreen, 
-  handleCheckout 
+  handleCheckout,
+  isPremium
 }: PremiumScreenProps) => {
   return (
     <motion.div 
@@ -74,7 +76,9 @@ export const PremiumScreen = React.memo(({
 
             <div className="pt-4">
               <div className="text-2xl font-bold font-display tracking-tight opacity-40">0,00€</div>
-              <div className="text-[10px] text-white/10 font-bold mt-1 uppercase tracking-widest">Plan Actual</div>
+              <div className="text-[10px] text-white/10 font-bold mt-1 uppercase tracking-widest">
+                {!isPremium ? 'Plan Actual' : 'Básico'}
+              </div>
             </div>
           </motion.div>
 
@@ -82,7 +86,7 @@ export const PremiumScreen = React.memo(({
           <motion.div 
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
-            className="p-8 rounded-[3rem] glass-card border-gold-500/20 space-y-8 relative overflow-hidden bg-gold-500/[0.03]"
+            className={`p-8 rounded-[3rem] glass-card ${isPremium ? 'border-gold-500' : 'border-gold-500/20'} space-y-8 relative overflow-hidden bg-gold-500/[0.03]`}
           >
             <div className="absolute top-0 right-0 p-6 opacity-10">
               <Crown size={40} className="text-gold-400" />
@@ -113,17 +117,20 @@ export const PremiumScreen = React.memo(({
 
             <div className="pt-4">
               <div className="text-2xl font-bold font-display tracking-tight text-gold-400">2,99€</div>
-              <div className="text-[10px] text-gold-500/40 font-bold mt-1 uppercase tracking-widest">Desde solo</div>
+              <div className="text-[10px] text-gold-500/40 font-bold mt-1 uppercase tracking-widest">
+                {isPremium ? 'Plan Actual' : 'Desde solo'}
+              </div>
             </div>
           </motion.div>
         </div>
 
         {/* Pricing & CTA */}
-        <div className="space-y-6 pt-4">
-          <div className="flex items-center gap-3 px-2">
-            <div className="w-1 h-4 bg-gold-500 rounded-full" />
-            <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-white/30">Planes de Suscripción</h4>
-          </div>
+        {!isPremium && (
+          <div className="space-y-6 pt-4">
+            <div className="flex items-center gap-3 px-2">
+              <div className="w-1 h-4 bg-gold-500 rounded-full" />
+              <h4 className="text-xs font-bold uppercase tracking-[0.2em] text-white/30">Planes de Suscripción</h4>
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <motion.div 
                 whileHover={{ scale: 1.02 }}
@@ -176,11 +183,15 @@ export const PremiumScreen = React.memo(({
                 </button>
               </motion.div>
             </div>
+          </div>
+        )}
 
-          <div className="space-y-4">
+        <div className="space-y-4">
+          {!isPremium && (
             <p className="text-center text-[10px] text-white/20 font-medium uppercase tracking-[0.2em]">
               Selecciona un plan para continuar
             </p>
+          )}
             <button 
               onClick={() => setScreen('home')}
               className="w-full py-5 rounded-[2rem] bg-white/5 text-white/40 font-bold text-sm hover:bg-white/10 transition-all"
@@ -189,7 +200,6 @@ export const PremiumScreen = React.memo(({
             </button>
           </div>
         </div>
-      </div>
     </motion.div>
   );
 });

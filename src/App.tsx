@@ -53,7 +53,7 @@ import { TermsSettingsScreen } from './components/screens/TermsSettingsScreen';
 import { PermissionsSettingsScreen } from './components/screens/PermissionsSettingsScreen';
 import { PermissionsRequestScreen } from './components/screens/PermissionsRequestScreen';
 import { SupportSettingsScreen } from './components/screens/SupportSettingsScreen';
-import { RewardsScreen } from './components/screens/RewardsScreen';
+import ReloadPrompt from './components/ReloadPrompt';
 import { getOfflineProduct } from './services/offlineData';
 import { fetchProductFromOFF, ProductData } from './services/openFoodFacts';
 import { analyzeIngredients, AnalysisResult, searchProductByBarcode, searchProductByName } from './services/gemini';
@@ -73,8 +73,7 @@ import {
   deleteUserMeals,
   saveScanToHistory,
   loadHistory,
-  deleteUserAccount,
-  addPoints
+  deleteUserAccount
 } from './services/supabase';
 import { cn } from './lib/utils';
 import { useLanguage } from './contexts/LanguageContext';
@@ -124,7 +123,7 @@ export default function App() {
     onConfirm: () => void;
   } | null>(null);
   const [dailyScans, setDailyScans] = useState(0);
-  const isPremium = userProfile?.plan === 'premium';
+  const isPremium = userProfile?.is_premium === true || userProfile?.plan === 'premium';
   const [openFaq, setOpenFaq] = useState<number | null>(null);
   const [showChat, setShowChat] = useState(false);
   const [showTicketForm, setShowTicketForm] = useState(false);
@@ -132,14 +131,58 @@ export default function App() {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ text: string, sender: 'user' | 'ai', time: string }[]>([]);
   const [session, setSession] = useState<any>(null);
-  const [historySearchQuery, setHistorySearchQuery] = useState('');
-  const [historyStatusFilter, setHistoryStatusFilter] = useState<'ALL' | 'HALAL' | 'HARAM' | 'DUDOSO'>('ALL');
-  const [historyStartDateFilter, setHistoryStartDateFilter] = useState('');
-  const [historyEndDateFilter, setHistoryEndDateFilter] = useState('');
-  const [historySortBy, setHistorySortBy] = useState<'date' | 'name' | 'status' | 'ingredients'>('date');
-  const [historySortOrder, setHistorySortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // History Filters Persistence
+  const [historySearchQuery, setHistorySearchQuery] = useState(() => localStorage.getItem('deensnap_history_search') || '');
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<'ALL' | 'HALAL' | 'HARAM' | 'DUDOSO'>(() => (localStorage.getItem('deensnap_history_status') as any) || 'ALL');
+  const [historyStartDateFilter, setHistoryStartDateFilter] = useState(() => localStorage.getItem('deensnap_history_start_date') || '');
+  const [historyEndDateFilter, setHistoryEndDateFilter] = useState(() => localStorage.getItem('deensnap_history_end_date') || '');
+  const [historyIngredientsFilter, setHistoryIngredientsFilter] = useState(() => localStorage.getItem('deensnap_history_ingredients') || '');
+  const [historySortBy, setHistorySortBy] = useState<'date' | 'name' | 'status' | 'ingredients'>(() => (localStorage.getItem('deensnap_history_sort_by') as any) || 'date');
+  const [historySortOrder, setHistorySortOrder] = useState<'asc' | 'desc'>(() => (localStorage.getItem('deensnap_history_sort_order') as any) || 'desc');
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Sync History Filters to localStorage
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_search', historySearchQuery);
+  }, [historySearchQuery]);
+
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_status', historyStatusFilter);
+  }, [historyStatusFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_start_date', historyStartDateFilter);
+  }, [historyStartDateFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_end_date', historyEndDateFilter);
+  }, [historyEndDateFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_ingredients', historyIngredientsFilter);
+  }, [historyIngredientsFilter]);
+
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_sort_by', historySortBy);
+  }, [historySortBy]);
+
+  useEffect(() => {
+    localStorage.setItem('deensnap_history_sort_order', historySortOrder);
+  }, [historySortOrder]);
+
+  // Validate History Date Range: Start date cannot be after end date
+  useEffect(() => {
+    if (historyStartDateFilter && historyEndDateFilter) {
+      const start = new Date(historyStartDateFilter);
+      const end = new Date(historyEndDateFilter);
+      if (start > end) {
+        setHistoryEndDateFilter(historyStartDateFilter);
+      }
+    }
+  }, [historyStartDateFilter, historyEndDateFilter]);
 
   useEffect(() => {
     if (showChat && scrollRef.current) {
@@ -186,11 +229,16 @@ export default function App() {
   const filteredHistory = useMemo(() => {
     return historyWithAlerts
       .filter(item => {
+        const ingredientsText = Array.isArray(item.ingredients) ? item.ingredients.join(', ') : (item.ingredients || "");
         const matchesSearch = !historySearchQuery || 
           (item.name && item.name.toLowerCase().includes(historySearchQuery.toLowerCase())) ||
-          (item.product_barcode && item.product_barcode.includes(historySearchQuery));
+          (item.product_barcode && item.product_barcode.includes(historySearchQuery)) ||
+          (ingredientsText.toLowerCase().includes(historySearchQuery.toLowerCase()));
         
         const matchesStatus = historyStatusFilter === 'ALL' || item.status === historyStatusFilter;
+        
+        const matchesIngredients = !historyIngredientsFilter || 
+          (ingredientsText.toLowerCase().includes(historyIngredientsFilter.toLowerCase()));
         
         const itemDate = item.scanned_at ? new Date(item.scanned_at).getTime() : 0;
         const startDate = historyStartDateFilter ? new Date(historyStartDateFilter).getTime() : 0;
@@ -198,7 +246,7 @@ export default function App() {
         
         const matchesDate = itemDate >= startDate && itemDate <= endDate;
 
-        return matchesSearch && matchesStatus && matchesDate;
+        return matchesSearch && matchesStatus && matchesDate && matchesIngredients;
       })
       .sort((a, b) => {
         let comparison = 0;
@@ -281,9 +329,18 @@ export default function App() {
   };
 
   const handleDeleteHistoryEntry = async (barcode: string, scannedAt: string) => {
-    if (!userProfile?.id) return;
+    const userId = userProfile?.id || session?.user?.id || 'demo-user-id';
     try {
-      await deleteHistoryEntry(userProfile.id, barcode, scannedAt);
+      // Delete from local storage
+      const localHistory = JSON.parse(localStorage.getItem('deensnap_history') || '[]');
+      const updatedLocal = localHistory.filter((item: any) => !(item.product_barcode === barcode && item.scanned_at === scannedAt));
+      localStorage.setItem('deensnap_history', JSON.stringify(updatedLocal));
+
+      // Delete from Supabase if we have a real session
+      if (supabase && (userProfile?.id || session?.user?.id)) {
+        await deleteHistoryEntry(userId, barcode, scannedAt);
+      }
+      
       setHistory(prev => prev.filter(item => !(item.product_barcode === barcode && item.scanned_at === scannedAt)));
     } catch (err) {
       console.error("Error deleting history entry:", err);
@@ -291,7 +348,7 @@ export default function App() {
   };
 
   const handleClearHistory = async () => {
-    if (!userProfile?.id) return;
+    const userId = userProfile?.id || session?.user?.id || 'demo-user-id';
     setConfirmModal({
       title: t('history') || "Historial",
       message: t('confirm_delete_history') || "¿Estás seguro de que quieres borrar todo tu historial?",
@@ -299,7 +356,13 @@ export default function App() {
         setLoading(true);
         setLoadingMessage(t('deleting_history') || "Borrando historial...");
         try {
-          await deleteUserHistory(userProfile.id);
+          // Clear local storage
+          localStorage.removeItem('deensnap_history');
+          
+          // Clear Supabase if we have a real session
+          if (supabase && (userProfile?.id || session?.user?.id)) {
+            await deleteUserHistory(userId);
+          }
           setHistory([]);
         } catch (err) {
           console.error("Error clearing history:", err);
@@ -309,6 +372,20 @@ export default function App() {
         }
       }
     });
+  };
+
+  const handleRefreshHistory = async () => {
+    const userId = userProfile?.id || session?.user?.id || 'demo-user-id';
+    setLoading(true);
+    setLoadingMessage(t('loading_history') || "Actualizando historial...");
+    try {
+      const updatedHistory = await loadHistory(userId);
+      setHistory(updatedHistory);
+    } catch (err) {
+      console.error("Error refreshing history:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDownloadData = () => {
@@ -334,26 +411,18 @@ export default function App() {
     link.download = `deensnap-data-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
-    document.body.removeChild(link);
+    if (link.parentNode === document.body) {
+      document.body.removeChild(link);
+    }
     URL.revokeObjectURL(url);
   };
 
   const saveToHistory = async (barcode: string, product: any) => {
-    const userId = userProfile?.id || session?.user?.id;
-    if (!userId) {
-      console.warn("App: No user ID available to save history");
-      return;
-    }
-
+    const userId = userProfile?.id || session?.user?.id || 'demo-user-id';
+    
     try {
       console.log(`App: Saving product ${barcode} to history for user ${userId}`);
       
-      // Award points for scanning
-      await addPoints(userId, 10);
-      
-      // Update local points state
-      setUserProfile((prev: any) => prev ? { ...prev, points: (prev.points || 0) + 10 } : null);
-
       // 1. Save product details first (needed for join in loadHistory)
       const productToSave = {
         barcode: barcode,
@@ -369,14 +438,15 @@ export default function App() {
         user_id: userId
       };
 
+      // Save product details (this handles local storage caching internally)
       await saveProduct(productToSave);
 
-      // 2. Save scan entry to Supabase
+      // 2. Save scan entry (this handles local storage fallback internally)
       await saveScanToHistory(userId, barcode);
       
       // 3. Refresh local history state
       const updatedHistory = await loadHistory(userId);
-      if (updatedHistory && updatedHistory.length > 0) {
+      if (updatedHistory) {
         setHistory(updatedHistory);
         console.log(`App: History updated with ${updatedHistory.length} entries`);
       }
@@ -543,15 +613,9 @@ export default function App() {
         name
       });
       
-      // Award 50 points for reporting
-      await addPoints(userProfile.id, 50);
-      
-      // Update local points state
-      setUserProfile((prev: any) => prev ? { ...prev, points: (prev.points || 0) + 50 } : null);
-
       setConfirmModal({
         title: "¡Gracias!",
-        message: "Tu reporte nos ayuda a mejorar. ¡Has ganado 50 puntos!",
+        message: "Tu reporte nos ayuda a mejorar.",
         onConfirm: () => setConfirmModal(null)
       });
     } catch (err) {
@@ -561,43 +625,6 @@ export default function App() {
     }
   }, [userProfile, t]);
 
-  const handleRedeem = async (rewardId: string, cost: number) => {
-    if (!userProfile?.id) return;
-    
-    setLoading(true);
-    setLoadingMessage("Procesando recompensa...");
-    
-    try {
-      // 1. Deduct points
-      await addPoints(userProfile.id, -cost);
-      
-      // 2. Apply reward
-      let newPlan = userProfile.plan;
-      if (rewardId.startsWith('premium')) {
-        newPlan = 'premium';
-      }
-      
-      await updateUserProfile({
-        id: userProfile.id,
-        plan: newPlan
-      });
-      
-      // 3. Refresh profile
-      const updatedProfile = await getUserProfile(userProfile.id);
-      setUserProfile(updatedProfile);
-      
-      setConfirmModal({
-        title: "¡Felicidades!",
-        message: `Has canjeado con éxito: ${rewardId.replace(/_/g, ' ')}. ¡Disfruta de tus beneficios!`,
-        onConfirm: () => setConfirmModal(null)
-      });
-      
-    } catch (err) {
-      setError("Error al canjear la recompensa.");
-    } finally {
-      setLoading(false);
-    }
-  };
 
   useEffect(() => {
     const syncLanguage = async () => {
@@ -664,6 +691,19 @@ export default function App() {
     const init = async () => {
       console.log("App: Starting initialization...");
       try {
+        // Load daily scans from local storage
+        const today = new Date().toISOString().split('T')[0];
+        const lastScanDate = localStorage.getItem('deensnap_last_scan_date');
+        const savedDailyScans = localStorage.getItem('deensnap_daily_scans');
+
+        if (lastScanDate !== today) {
+          localStorage.setItem('deensnap_last_scan_date', today);
+          localStorage.setItem('deensnap_daily_scans', '0');
+          setDailyScans(0);
+        } else if (savedDailyScans) {
+          setDailyScans(parseInt(savedDailyScans, 10));
+        }
+
         if (!supabase) {
           setIsAppLoaded(true);
           return;
@@ -674,12 +714,21 @@ export default function App() {
         setSession(currentSession);
 
         if (!currentSession) {
+          // Load local history for non-logged in users
+          const localHistory = await loadHistory('demo-user-id');
+          if (localHistory) setHistory(localHistory);
           setIsAppLoaded(true);
           return;
         }
 
         const userId = currentSession.user.id;
         
+        // Update daily scans in local storage whenever it changes
+        const updateDailyScans = (count: number) => {
+          setDailyScans(count);
+          localStorage.setItem('deensnap_daily_scans', count.toString());
+        };
+
         // Set a safety timeout to ensure the app loads even if background tasks hang
         const safetyTimeout = setTimeout(() => {
           console.warn("App: Initialization taking too long, forcing load state...");
@@ -969,6 +1018,7 @@ export default function App() {
           // Save to history and refresh (save objective result)
           await saveToHistory(barcode, analysisResult);
           
+          setDailyScans(prev => prev + 1);
           setScreen('result');
           setLoading(false);
           return;
@@ -1035,6 +1085,7 @@ export default function App() {
         // Save objective product to cache, but record this scan in history
         await saveToHistory(objectiveProduct.barcode, objectiveProduct);
 
+        setDailyScans(prev => prev + 1);
         setScreen('result');
       }
     } catch (err: any) {
@@ -1083,6 +1134,7 @@ export default function App() {
         }
 
         setCurrentProduct(displayProduct as any);
+        setDailyScans(prev => prev + 1);
         setScreen('result');
         
         // Save to history and refresh (save objective product)
@@ -1185,6 +1237,8 @@ export default function App() {
             setHistoryStartDateFilter={setHistoryStartDateFilter}
             historyEndDateFilter={historyEndDateFilter}
             setHistoryEndDateFilter={setHistoryEndDateFilter}
+            historyIngredientsFilter={historyIngredientsFilter}
+            setHistoryIngredientsFilter={setHistoryIngredientsFilter}
             historySortBy={historySortBy}
             setHistorySortBy={setHistorySortBy}
             historySortOrder={historySortOrder}
@@ -1194,6 +1248,7 @@ export default function App() {
             setLoadingMessage={setLoadingMessage}
             setCurrentProduct={setCurrentProduct}
             handleDeleteHistoryEntry={handleDeleteHistoryEntry}
+            handleRefreshHistory={handleRefreshHistory}
           />
         );
 
@@ -1242,32 +1297,13 @@ export default function App() {
           />
         );
 
-      case 'rewards':
-        return (
-          <RewardsScreen 
-            t={t}
-            setScreen={setScreen}
-            userProfile={userProfile}
-            onRedeem={handleRedeem}
-          />
-        );
-
       case 'premium':
         return (
           <PremiumScreen 
             t={t}
             setScreen={setScreen}
             handleCheckout={handleCheckout}
-          />
-        );
-
-      case 'rewards':
-        return (
-          <RewardsScreen 
-            t={t}
-            setScreen={setScreen}
-            userProfile={userProfile}
-            onRedeem={handleRedeem}
+            isPremium={isPremium}
           />
         );
 
@@ -1723,6 +1759,7 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
+      <ReloadPrompt />
     </div>
   );
 }

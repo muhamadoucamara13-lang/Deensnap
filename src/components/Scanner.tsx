@@ -20,6 +20,15 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
   const [permissionError, setPermissionError] = useState<string | null>(null);
   const [facingMode, setFacingMode] = useState<"environment" | "user">("environment");
   const [hasMultipleCameras, setHasMultipleCameras] = useState(false);
+  const isMounted = useRef(true);
+  const isTransitioning = useRef(false);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => {
+      isMounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     // Check for multiple cameras
@@ -37,8 +46,13 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
 
   useEffect(() => {
     if (isManual) {
-      if (scannerRef.current && scannerRef.current.isScanning) {
-        scannerRef.current.stop().catch(err => console.debug("Scanner stop notice:", err));
+      if (scannerRef.current && scannerRef.current.isScanning && !isTransitioning.current) {
+        isTransitioning.current = true;
+        scannerRef.current.stop()
+          .catch(err => console.debug("Scanner stop notice:", err))
+          .finally(() => {
+            isTransitioning.current = false;
+          });
       }
       return;
     }
@@ -58,6 +72,9 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
     scannerRef.current = html5QrCode;
 
     const startScanner = async () => {
+      if (isTransitioning.current) return;
+      isTransitioning.current = true;
+
       try {
         const readerElement = document.getElementById("reader");
         if (readerElement) readerElement.innerHTML = "";
@@ -82,16 +99,21 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
               playScanSound();
 
               onScan(decodedText);
-              // We don't call stop() here immediately to avoid race conditions with cleanup
-              // The component will likely unmount or change state which triggers cleanup
             }
           },
           () => {}
         );
+
+        // Re-check cameras after successful start to ensure we have permissions
+        const devices = await Html5Qrcode.getCameras();
+        if (devices && devices.length > 1) {
+          setHasMultipleCameras(true);
+        }
       } catch (err: any) {
         console.error("Unable to start scanner", err);
         if (err?.name === 'NotAllowedError' || err?.toString().includes('Permission denied')) {
           setPermissionError(t('camera_permission_denied') || "Permiso de cámara denegado. Por favor, actívalo en los ajustes de tu navegador.");
+          isTransitioning.current = false;
           return;
         }
         try {
@@ -112,6 +134,8 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
         } catch (fallbackErr) {
           console.error("Fallback scanner failed", fallbackErr);
         }
+      } finally {
+        isTransitioning.current = false;
       }
     };
 
@@ -123,17 +147,45 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
           const instance = scannerRef.current;
           scannerRef.current = null;
           
+          if (isTransitioning.current) {
+            // If already transitioning, we might need to wait or just skip
+            // but for cleanup we should try to force it if possible or at least not crash
+          }
+          isTransitioning.current = true;
+
           try {
             if (instance.isScanning) {
-              await instance.stop();
+              // Manually pause the video element if it exists to prevent "play() interrupted" errors
+              // when the element is removed from the DOM by html5-qrcode's stop() or React's unmount
+              const element = document.getElementById("reader");
+              const video = element?.querySelector('video');
+              if (video) {
+                try {
+                  video.pause();
+                  video.srcObject = null;
+                } catch (e) {
+                  // Ignore errors during manual pause
+                }
+              }
+
+              // Use a timeout to prevent hanging on stop
+              const stopPromise = instance.stop();
+              const timeoutPromise = new Promise((_, reject) => 
+                setTimeout(() => reject(new Error("Timeout")), 3000)
+              );
+              await Promise.race([stopPromise, timeoutPromise]);
             }
-            // Only clear if the element still exists in DOM
+            
+            // Only clear if the element is still in the DOM
             const element = document.getElementById("reader");
             if (element) {
               await instance.clear();
             }
           } catch (err) {
+            // Silently handle cleanup errors as they are often just race conditions
             console.debug("Scanner cleanup notice:", err);
+          } finally {
+            isTransitioning.current = false;
           }
         }
       };
@@ -142,21 +194,29 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
   }, [onScan, isManual, t, facingMode]);
 
   const toggleCamera = () => {
+    if (isTransitioning.current) return;
     setFacingMode(prev => prev === "environment" ? "user" : "environment");
   };
 
   const playScanSound = () => {
+    if (!isMounted.current) return;
     try {
+      // Create a new instance each time to avoid interruption of previous play requests
+      // and "removed from document" errors that can happen when reusing/cleaning up a single ref
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2571/2571-preview.mp3');
       audio.volume = 0.5;
+      
       const playPromise = audio.play();
       if (playPromise !== undefined) {
-        playPromise.catch(() => {
-          // Ignore play interruptions
+        playPromise.catch((err) => {
+          // Ignore AbortError and NotAllowedError as they are common and benign in this context
+          if (err.name !== 'AbortError' && err.name !== 'NotAllowedError') {
+            console.debug("Audio play error:", err);
+          }
         });
       }
     } catch (e) {
-      // Ignore audio errors
+      console.debug("Audio error:", e);
     }
   };
 

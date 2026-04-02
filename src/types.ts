@@ -1,1 +1,1 @@
-export type Screen = 'home' | 'scanner' | 'result' | 'history' | 'premium' | 'map' | 'settings' | 'profile_settings' | 'language_settings' | 'privacy_settings' | 'support_settings' | 'terms_settings' | 'permissions_settings' | 'permissions_request' | 'favorites' | 'meals' | 'rewards';
+export type Screen = 'home' | 'scanner' | 'result' | 'history' | 'premium' | 'map' | 'settings' | 'profile_settings' | 'language_settings' | 'privacy_settings' | 'support_settings' | 'terms_settings' | 'permissions_settings' | 'permissions_request' | 'favorites' | 'meals';

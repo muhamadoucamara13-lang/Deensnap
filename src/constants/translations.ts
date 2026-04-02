@@ -202,6 +202,8 @@ export const translations = {
     sort_name: 'Nombre',
     sort_status: 'Estado',
     sort_ingredients: 'Ingredientes',
+    switch_to_front: 'Cámara Frontal',
+    switch_to_rear: 'Cámara Trasera',
   },
   en: {
     home: 'Home',
@@ -403,6 +405,8 @@ export const translations = {
     sort_name: 'Name',
     sort_status: 'Status',
     sort_ingredients: 'Ingredients',
+    switch_to_front: 'Front Camera',
+    switch_to_rear: 'Rear Camera',
   },
   fr: {
     home: 'Accueil',
@@ -600,6 +604,8 @@ export const translations = {
     sort_name: 'Nom',
     sort_status: 'Statut',
     sort_ingredients: 'Ingrédients',
+    switch_to_front: 'Caméra Frontale',
+    switch_to_rear: 'Caméra Arrière',
   },
   ar: {
     home: 'الرئيسية',
@@ -797,5 +803,7 @@ export const translations = {
     sort_name: 'الاسم',
     sort_status: 'الحالة',
     sort_ingredients: 'المكونات',
+    switch_to_front: 'الكاميرا الأمامية',
+    switch_to_rear: 'الكاميرا الخلفية',
   },
 };
