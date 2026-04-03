@@ -12,7 +12,26 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
-        includeAssets: ['favicon.svg', 'logo.svg', 'logo-192.svg', 'logo-512.svg', 'mask-icon.svg'],
+        workbox: {
+          globPatterns: ['logo-192.svg', 'logo-512.svg', 'logo.svg', 'favicon.svg', 'mask-icon.svg'], // Precache icons for PWA installability
+          runtimeCaching: [
+            {
+              urlPattern: /^https:\/\/.*\/logo.*\.svg$/i,
+              handler: 'CacheFirst', // Cache icons for better performance and reliability
+              options: {
+                cacheName: 'pwa-icons',
+                expiration: {
+                  maxEntries: 10,
+                  maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+                },
+              },
+            },
+            {
+              urlPattern: /.*/i,
+              handler: 'NetworkOnly', // Always fetch everything else from network
+            },
+          ],
+        },
         manifest: {
           name: 'DeenSnap - Halal Scanner',
           short_name: 'DeenSnap',
@@ -27,18 +46,20 @@ export default defineConfig(({ mode }) => {
             {
               src: 'logo-192.svg',
               sizes: '192x192',
-              type: 'image/svg+xml'
-            },
-            {
-              src: 'logo-512.svg',
-              sizes: '512x512',
-              type: 'image/svg+xml'
+              type: 'image/svg+xml',
+              purpose: 'any'
             },
             {
               src: 'logo-512.svg',
               sizes: '512x512',
               type: 'image/svg+xml',
-              purpose: 'any maskable'
+              purpose: 'any'
+            },
+            {
+              src: 'logo-512.svg',
+              sizes: '512x512',
+              type: 'image/svg+xml',
+              purpose: 'maskable'
             }
           ]
         }

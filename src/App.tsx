@@ -53,8 +53,6 @@ import { TermsSettingsScreen } from './components/screens/TermsSettingsScreen';
 import { PermissionsSettingsScreen } from './components/screens/PermissionsSettingsScreen';
 import { PermissionsRequestScreen } from './components/screens/PermissionsRequestScreen';
 import { SupportSettingsScreen } from './components/screens/SupportSettingsScreen';
-import ReloadPrompt from './components/ReloadPrompt';
-import { getOfflineProduct } from './services/offlineData';
 import { fetchProductFromOFF, ProductData } from './services/openFoodFacts';
 import { analyzeIngredients, AnalysisResult, searchProductByBarcode, searchProductByName } from './services/gemini';
 import { 
@@ -131,7 +129,6 @@ export default function App() {
   const [chatMessage, setChatMessage] = useState('');
   const [chatHistory, setChatHistory] = useState<{ text: string, sender: 'user' | 'ai', time: string }[]>([]);
   const [session, setSession] = useState<any>(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
   
   // History Filters Persistence
   const [historySearchQuery, setHistorySearchQuery] = useState(() => localStorage.getItem('deensnap_history_search') || '');
@@ -684,12 +681,6 @@ export default function App() {
       }
     };
 
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
     const handleError = (event: ErrorEvent) => {
       console.error("Global error:", event.error);
       setError(event.error?.message || "Runtime error");
@@ -821,8 +812,6 @@ export default function App() {
     init();
     
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
       window.removeEventListener('error', handleError);
       window.removeEventListener('focus', checkPermissions);
     };
@@ -934,33 +923,6 @@ export default function App() {
     }, 35000); // 35 seconds total safety timeout
 
     try {
-      // 1. Check Offline Data First
-      const offlineProduct = getOfflineProduct(barcode);
-      if (offlineProduct) {
-        console.log("App: Found product in offline database");
-        clearTimeout(safetyTimeout);
-        
-        // Apply personal alerts
-        const ingredientsText = offlineProduct.ingredients || "";
-        const foundAlerts = userAlerts.filter(alert => 
-          ingredientsText.toLowerCase().includes(alert.toLowerCase())
-        );
-
-        let finalProduct = { ...offlineProduct };
-        if (foundAlerts.length > 0 && finalProduct.status === 'HALAL') {
-          finalProduct.status = 'DUDOSO';
-          finalProduct.reason = `${t('doubtful')}: ${foundAlerts.join(', ')}. ${finalProduct.reason || ''}`;
-        }
-
-        setCurrentProduct(finalProduct as any);
-        setScreen('result');
-        setLoading(false);
-        setDailyScans(prev => prev + 1);
-        
-        await saveToHistory(barcode, offlineProduct);
-        return;
-      }
-
       setLoadingMessage("Buscando en caché...");
       const cached = await getSavedProduct(barcode);
       if (cached) {
@@ -991,10 +953,6 @@ export default function App() {
 
       setLoadingMessage("Consultando base de datos...");
       
-      if (!navigator.onLine) {
-        throw new Error(t('offline_mode') + ": " + t('error_not_found'));
-      }
-
       const product = await fetchProductFromOFF(barcode);
       
       // Case 1: Product not found in OFF (status 0)
@@ -1119,12 +1077,6 @@ export default function App() {
     setLoading(true);
     setLoadingMessage(t('consulting_ai'));
     setError(null);
-
-    if (!navigator.onLine) {
-      setLoading(false);
-      setError(t('offline_mode') + ": " + t('error_generic'));
-      return;
-    }
 
     try {
       const searchResult = await searchProductByName(name, language);
@@ -1779,7 +1731,6 @@ export default function App() {
           </div>
         )}
       </AnimatePresence>
-      <ReloadPrompt />
     </div>
   );
 }

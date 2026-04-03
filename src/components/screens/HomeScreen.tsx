@@ -11,10 +11,9 @@ interface HomeScreenProps {
   handleSearchByName: (name: string) => void;
   historyWithAlerts: any[];
   setCurrentProduct: (p: any) => void;
-  isOnline: boolean;
 }
 
-export const HomeScreen = React.memo(({ t, setScreen, handleSearchByName, historyWithAlerts, setCurrentProduct, isOnline }: HomeScreenProps) => {
+export const HomeScreen = React.memo(({ t, setScreen, handleSearchByName, historyWithAlerts, setCurrentProduct }: HomeScreenProps) => {
   const searchInputRef = useRef<HTMLInputElement>(null);
   
   return (
@@ -28,18 +27,6 @@ export const HomeScreen = React.memo(({ t, setScreen, handleSearchByName, histor
       <header className="p-6 pt-12 flex justify-between items-center sticky top-0 z-50 bg-[#050505]/80 backdrop-blur-lg">
         <div className="flex flex-col">
           <Logo showText size={44} />
-          {!isOnline && (
-            <motion.div 
-              initial={{ opacity: 0, y: -10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="flex items-center gap-1.5 mt-1"
-            >
-              <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-[10px] font-bold text-amber-500 uppercase tracking-widest">
-                {t('offline_mode')}
-              </span>
-            </motion.div>
-          )}
         </div>
         <div className="flex items-center gap-3">
           <button className="p-2.5 rounded-xl glass-button relative group">
