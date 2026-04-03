@@ -201,13 +201,6 @@ export function Auth({ onSuccess }: AuthProps) {
 
           <div className="mt-6 flex flex-col gap-4 items-center">
             <button 
-              onClick={handleDemoMode}
-              className="w-full py-3 rounded-2xl bg-white/5 border border-white/10 text-sm font-medium text-white/60 hover:bg-white/10 hover:text-white transition-all"
-            >
-              Probar Modo Demo (Sin conexión)
-            </button>
-            
-            <button 
               onClick={() => setIsLogin(!isLogin)}
               className="text-sm font-medium text-white/40 hover:text-white transition-colors"
             >

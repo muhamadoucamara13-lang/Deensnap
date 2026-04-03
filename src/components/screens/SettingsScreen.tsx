@@ -1,8 +1,12 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Menu, User, Globe, Moon, Download, ArrowRight, LogOut, Trophy, Smartphone } from 'lucide-react';
+import { 
+  Menu, User, Globe, Moon, Download, ArrowRight, LogOut, 
+  Smartphone, Clock, Heart, Utensils, Shield, FileText, HelpCircle 
+} from 'lucide-react';
 import { Screen } from '../../types';
 import { usePWA } from '../../contexts/PWAContext';
+import { cn } from '../../lib/utils';
 
 interface SettingsScreenProps {
   t: (key: any) => string;
@@ -29,6 +33,19 @@ export const SettingsScreen = React.memo(({
 }: SettingsScreenProps) => {
   const { isInstallable, isInstalled, installApp } = usePWA();
 
+  const menuItems = [
+    { id: 'profile_settings', icon: User, label: t('profile'), color: 'bg-emerald-500/10 text-emerald-400' },
+    { id: 'history', icon: Clock, label: t('history'), color: 'bg-blue-500/10 text-blue-400' },
+    { id: 'favorites', icon: Heart, label: t('favorites'), color: 'bg-rose-500/10 text-rose-400' },
+    { id: 'meals', icon: Utensils, label: t('my_meals'), color: 'bg-orange-500/10 text-orange-400' },
+  ];
+
+  const legalItems = [
+    { id: 'privacy_settings', icon: Shield, label: t('privacy'), color: 'bg-indigo-500/10 text-indigo-400' },
+    { id: 'terms_settings', icon: FileText, label: t('terms_conditions'), color: 'bg-slate-500/10 text-slate-400' },
+    { id: 'support_settings', icon: HelpCircle, label: t('support'), color: 'bg-amber-500/10 text-amber-400' },
+  ];
+
   return (
     <motion.div 
       initial={{ opacity: 0, scale: 0.95 }}
@@ -45,20 +62,26 @@ export const SettingsScreen = React.memo(({
 
       <div className="space-y-8">
         {/* Profile Card */}
-        <div className="p-8 rounded-[3rem] glass-card border-white/10 relative overflow-hidden group">
+        <div 
+          onClick={() => setScreen('profile_settings')}
+          className="p-8 rounded-[3rem] glass-card border-white/10 relative overflow-hidden group cursor-pointer hover:border-emerald-500/30 transition-all"
+        >
           <div className="absolute top-0 right-0 -mr-10 -mt-10 w-40 h-40 bg-emerald-500/10 blur-[80px] rounded-full" />
           <div className="relative flex items-center gap-6">
             <div className="w-20 h-20 rounded-[2rem] premium-gradient flex items-center justify-center shadow-2xl shadow-emerald-500/20">
               <User size={40} className="text-white" />
             </div>
-            <div>
-              <h3 className="text-2xl font-bold font-display tracking-tight">{userProfile?.full_name || 'Usuario'}</h3>
+            <div className="flex-1">
+              <h3 className="text-2xl font-bold font-display tracking-tight">{userProfile?.name || userProfile?.full_name || 'Usuario'}</h3>
               <p className="text-white/40 text-sm font-medium">{userProfile?.email}</p>
               <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20">
                 <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Cuenta Activa</span>
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">
+                  {userProfile?.plan === 'premium' ? 'Miembro Elite' : 'Cuenta Estándar'}
+                </span>
               </div>
             </div>
+            <ArrowRight size={20} className="text-white/20 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </div>
         </div>
 
@@ -89,6 +112,29 @@ export const SettingsScreen = React.memo(({
           </div>
         )}
 
+        {/* Main Menu Items */}
+        <div className="space-y-4">
+          <div className="px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">Mi Actividad</div>
+          <div className="p-2 rounded-[2.5rem] glass-card border-white/5 space-y-1">
+            {menuItems.map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => setScreen(item.id as Screen)}
+                className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", item.color)}>
+                    <item.icon size={20} />
+                  </div>
+                  <span className="font-bold tracking-tight">{item.label}</span>
+                </div>
+                <ArrowRight size={18} className="text-white/10 group-hover:text-white/40 transition-all group-hover:translate-x-1" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Preferences */}
         <div className="space-y-4">
           <div className="px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{t('preferences')}</div>
           <div className="p-2 rounded-[2.5rem] glass-card border-white/5 space-y-1">
@@ -128,6 +174,29 @@ export const SettingsScreen = React.memo(({
           </div>
         </div>
 
+        {/* Legal & Support */}
+        <div className="space-y-4">
+          <div className="px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">Legal y Soporte</div>
+          <div className="p-2 rounded-[2.5rem] glass-card border-white/5 space-y-1">
+            {legalItems.map((item) => (
+              <button 
+                key={item.id}
+                onClick={() => setScreen(item.id as Screen)}
+                className="w-full flex items-center justify-between p-4 rounded-2xl hover:bg-white/5 transition-colors group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className={cn("w-10 h-10 rounded-xl flex items-center justify-center", item.color)}>
+                    <item.icon size={20} />
+                  </div>
+                  <span className="font-bold tracking-tight">{item.label}</span>
+                </div>
+                <ArrowRight size={18} className="text-white/10 group-hover:text-white/40 transition-all group-hover:translate-x-1" />
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Data Management */}
         <div className="space-y-4">
           <div className="px-4 text-[10px] font-bold uppercase tracking-[0.3em] text-white/20">{t('data_management')}</div>
           <div className="p-2 rounded-[2.5rem] glass-card border-white/5 space-y-1">

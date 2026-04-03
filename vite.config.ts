@@ -31,6 +31,9 @@ export default defineConfig(({ mode }) => {
               handler: 'NetworkOnly', // Always fetch everything else from network
             },
           ],
+          cleanupOutdatedCaches: true,
+          skipWaiting: true,
+          clientsClaim: true
         },
         manifest: {
           name: 'DeenSnap - Halal Scanner',
