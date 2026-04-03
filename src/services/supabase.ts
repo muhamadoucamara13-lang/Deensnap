@@ -225,12 +225,13 @@ export async function logMeal(meal: MealEntry) {
 }
 
 export async function saveScanToHistory(userId: string, barcode: string) {
+  const timestamp = new Date().toISOString();
   // Save to local storage first as a fallback
   try {
     const localHistory = JSON.parse(localStorage.getItem('deensnap_history') || '[]');
     const newEntry = {
       product_barcode: barcode,
-      scanned_at: new Date().toISOString(),
+      scanned_at: timestamp,
       user_id: userId
     };
     localStorage.setItem('deensnap_history', JSON.stringify([newEntry, ...localHistory].slice(0, 100)));
@@ -249,7 +250,7 @@ export async function saveScanToHistory(userId: string, barcode: string) {
     const entry = {
       user_id: userId,
       product_barcode: barcode,
-      scanned_at: new Date().toISOString()
+      scanned_at: timestamp
     };
     
     const { data, error } = await supabase
@@ -271,8 +272,23 @@ export async function loadHistory(userId: string) {
   let localData: any[] = [];
   try {
     localData = JSON.parse(localStorage.getItem('deensnap_history') || '[]');
-    // Filter by user_id if it's not a demo user
+    
+    // If user is logged in, migrate demo history to their account in local storage
     if (userId !== 'demo-user-id') {
+      let migrated = false;
+      localData = localData.map(item => {
+        if (item.user_id === 'demo-user-id') {
+          migrated = true;
+          return { ...item, user_id: userId };
+        }
+        return item;
+      });
+      
+      if (migrated) {
+        localStorage.setItem('deensnap_history', JSON.stringify(localData));
+      }
+      
+      // Now filter by the current user_id
       localData = localData.filter(item => item.user_id === userId);
     }
   } catch (e) {
@@ -307,12 +323,13 @@ export async function loadHistory(userId: string) {
   
   try {
     // Attempt to fetch history with product details using join
+    // Using the correct Supabase join syntax: table_name(column1, column2)
     const { data, error } = await supabase
       .from('history')
       .select(`
         product_barcode, 
         scanned_at,
-        products:product_barcode (
+        products(
           name,
           status,
           ingredients,
@@ -398,7 +415,7 @@ export async function loadHistory(userId: string) {
       localProducts = JSON.parse(localStorage.getItem('deensnap_products') || '{}');
     } catch (e) {}
 
-    // Merge local and remote
+    // Merge local and remote, avoiding duplicates
     const merged = [...remoteHistory];
     localData.forEach(localItem => {
       if (!merged.some(remoteItem => remoteItem.product_barcode === localItem.product_barcode && remoteItem.scanned_at === localItem.scanned_at)) {
@@ -412,6 +429,7 @@ export async function loadHistory(userId: string) {
         });
       }
     });
+
     return merged.sort((a, b) => new Date(b.scanned_at).getTime() - new Date(a.scanned_at).getTime());
   } catch (err) {
     console.error("Exception loading history:", err);

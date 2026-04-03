@@ -548,14 +548,8 @@ export default function App() {
       
       console.log("App: Checkout session created, redirecting to:", data.url);
       if (data.url) {
-        // Try to open in a new tab first (standard for desktop)
-        const newWindow = window.open(data.url, '_blank');
-        
-        // If popup is blocked (common on mobile) or we are on mobile, use direct redirect
-        if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
-          console.log("App: Popup blocked or failed, redirecting current window");
-          window.location.href = data.url;
-        }
+        // Direct redirect is more reliable for PWAs and mobile
+        window.location.href = data.url;
       } else {
         throw new Error("No se recibió la URL de pago de Stripe");
       }

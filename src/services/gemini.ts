@@ -1,7 +1,7 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
-const GEMINI_SEARCH_MODEL = "gemini-3.1-pro-preview";
+const GEMINI_SEARCH_MODEL = "gemini-3-flash-preview";
 
 export interface AnalysisResult {
   status: "HALAL" | "DUDOSO" | "HARAM";
@@ -17,12 +17,16 @@ export interface AnalysisResult {
   alternatives?: string[];
 }
 
-export async function analyzeIngredients(ingredients: string, productName: string, lang: string = 'es'): Promise<AnalysisResult> {
+function getApiKey() {
   const apiKey = typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined;
   if (!apiKey) {
     throw new Error("Gemini API Key not found. Please ensure it is set in the environment.");
   }
+  return apiKey;
+}
 
+export async function analyzeIngredients(ingredients: string, productName: string, lang: string = 'es'): Promise<AnalysisResult> {
+  const apiKey = getApiKey();
   const ai = new GoogleGenAI({ apiKey });
   
   const languageNames: Record<string, string> = {
@@ -118,31 +122,29 @@ export async function analyzeIngredients(ingredients: string, productName: strin
 }
 
 export async function searchProductByBarcode(barcode: string): Promise<AnalysisResult & { name: string, ingredients: string } | null> {
-  const apiKey = typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined;
-  if (!apiKey) return null;
-
-  const ai = new GoogleGenAI({ apiKey });
-  
-  const prompt = `
-    Busca información detallada en internet sobre el producto con código de barras: ${barcode}.
-    Necesito el nombre comercial completo del producto y su lista completa de ingredientes.
-    Si encuentras el producto, analiza si es Halal según las normas islámicas (revisando aditivos E, origen de gelatinas, enzimas, origen animal, etc.).
-    Si NO encuentras información sobre este código de barras específico, intenta buscar qué producto suele estar asociado a este código en bases de datos globales o describe el tipo de producto si el código sugiere una categoría.
-    Responde SOLO en formato JSON.
-    
-    Esquema:
-    {
-      "name": "nombre del producto",
-      "ingredients": "lista de ingredientes",
-      "status": "HALAL / DUDOSO / HARAM",
-      "reason": "explicación detallada en español",
-      "risk_ingredients": ["ingredientes problemáticos"],
-      "confidence": "alta / media / baja",
-      "alternatives": ["3 alternativas halal"]
-    }
-  `;
-
   try {
+    const apiKey = getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const prompt = `
+      Busca información detallada en internet sobre el producto con código de barras: ${barcode}.
+      Necesito el nombre comercial completo del producto y su lista completa de ingredientes.
+      Si encuentras el producto, analiza si es Halal según las normas islámicas (revisando aditivos E, origen de gelatinas, enzimas, origen animal, etc.).
+      Si NO encuentras información sobre este código de barras específico, intenta buscar qué producto suele estar asociado a este código en bases de datos globales o describe el tipo de producto si el código sugiere una categoría.
+      Responde SOLO en formato JSON.
+      
+      Esquema:
+      {
+        "name": "nombre del producto",
+        "ingredients": "lista de ingredientes",
+        "status": "HALAL / DUDOSO / HARAM",
+        "reason": "explicación detallada en español",
+        "risk_ingredients": ["ingredientes problemáticos"],
+        "confidence": "alta / media / baja",
+        "alternatives": ["3 alternativas halal"]
+      }
+    `;
+
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error("Timeout: La búsqueda está tardando demasiado.")), 45000)
     );
@@ -182,8 +184,7 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
 
     const text = response.text;
     if (!text) {
-      console.warn("Gemini returned empty text for barcode:", barcode);
-      return null;
+      throw new Error("No se recibió respuesta de la IA para este código de barras.");
     }
     
     console.log("Gemini barcode result text:", text);
@@ -191,48 +192,55 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
       return JSON.parse(text);
     } catch (parseError) {
       console.error("Error parsing Gemini barcode JSON:", parseError);
-      return null;
+      throw new Error("Error al procesar la respuesta de la IA.");
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini search error:", error);
-    return null;
+    // If it's a known error from Gemini, throw it
+    if (error.message && (error.message.includes("API Key") || error.message.includes("Timeout"))) {
+      throw error;
+    }
+    return null; // Return null for "not found" cases to trigger the specific UI
   }
 }
 
 export async function searchProductByName(name: string, lang: string = 'es'): Promise<AnalysisResult & { name: string, ingredients: string } | null> {
-  const apiKey = typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined;
-  if (!apiKey) return null;
-
-  const ai = new GoogleGenAI({ apiKey });
-  
-  const languageNames: Record<string, string> = {
-    es: 'español',
-    en: 'english',
-    fr: 'français',
-    ar: 'arabic'
-  };
-  const targetLang = languageNames[lang] || 'español';
-
-  const prompt = `
-    Busca información detallada en internet sobre el producto llamado: ${name}.
-    Necesito el nombre comercial completo del producto y su lista completa de ingredientes.
-    Si no encuentras un producto específico con ese nombre exacto, busca información general sobre los ingredientes típicos de un producto de ese tipo (por ejemplo, si buscan "jamón", analiza los ingredientes comunes del jamón curado o cocido).
-    Analiza si es Halal según las normas islámicas (revisando aditivos E, origen de gelatinas, enzimas, origen animal, etc.).
-    Responde SOLO en formato JSON.
-    
-    Esquema:
-    {
-      "name": "nombre del producto o tipo de producto",
-      "ingredients": "lista de ingredientes encontrados o típicos",
-      "status": "HALAL / DUDOSO / HARAM",
-      "reason": "explicación detallada en ${targetLang}",
-      "risk_ingredients": ["ingredientes problemáticos"],
-      "confidence": "alta / media / baja",
-      "alternatives": ["3 alternativas halal"]
-    }
-  `;
-
   try {
+    const apiKey = getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const languageNames: Record<string, string> = {
+      es: 'español',
+      en: 'english',
+      fr: 'français',
+      ar: 'arabic'
+    };
+    const targetLang = languageNames[lang] || 'español';
+
+    const prompt = `
+      Actúa como un experto en alimentación Halal.
+      Busca información en internet sobre el producto o categoría: "${name}".
+      
+      INSTRUCCIONES:
+      1. Si es un producto específico, busca sus ingredientes.
+      2. Si es una categoría general (ej: "jamón", "queso", "yogur"), analiza los ingredientes típicos y aditivos comunes en esa categoría.
+      3. Determina si es HALAL, DUDOSO o HARAM según la ley islámica.
+      4. Responde SIEMPRE en formato JSON.
+      
+      IMPORTANTE: La explicación en "reason" debe estar en ${targetLang}.
+      
+      Esquema de respuesta:
+      {
+        "name": "nombre del producto o categoría",
+        "ingredients": "lista de ingredientes encontrados o típicos",
+        "status": "HALAL / DUDOSO / HARAM",
+        "reason": "explicación detallada en ${targetLang}",
+        "risk_ingredients": ["ingredientes problemáticos si los hay"],
+        "confidence": "alta / media / baja",
+        "alternatives": ["3 alternativas halal"]
+      }
+    `;
+
     const timeoutPromise = new Promise((_, reject) => 
       setTimeout(() => reject(new Error("Timeout: La búsqueda está tardando demasiado.")), 45000)
     );
@@ -241,7 +249,7 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
       model: GEMINI_SEARCH_MODEL,
       contents: [{ parts: [{ text: prompt }] }],
       config: {
-        temperature: 0,
+        temperature: 0.2, // Slightly higher temperature for better search synthesis
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
@@ -262,29 +270,34 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
               items: { type: Type.STRING }
             }
           },
-          required: ["name", "ingredients", "status", "reason", "risk_ingredients", "confidence"]
+          required: ["name", "ingredients", "status", "reason"]
         }
       }
     });
 
     const response = await Promise.race([callPromise, timeoutPromise]) as any;
-    console.log("Gemini name search response received");
-
     const text = response.text;
+    
     if (!text) {
-      console.warn("Gemini returned empty text for name search:", name);
-      return null;
+      throw new Error("No se recibió respuesta de la IA.");
     }
     
-    console.log("Gemini name search result text:", text);
     try {
-      return JSON.parse(text);
+      const result = JSON.parse(text);
+      // Ensure required fields are present even if model missed them (though schema should handle it)
+      if (!result.name || !result.status || !result.reason) {
+        return null;
+      }
+      return result;
     } catch (parseError) {
       console.error("Error parsing Gemini name search JSON:", parseError);
-      return null;
+      throw new Error("Error al procesar la respuesta de la IA.");
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini search by name error:", error);
+    if (error.message && (error.message.includes("API Key") || error.message.includes("Timeout"))) {
+      throw error;
+    }
     return null;
   }
 }
