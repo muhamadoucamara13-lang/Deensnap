@@ -676,8 +676,18 @@ export default function App() {
     };
 
     const handleError = (event: ErrorEvent) => {
-      console.error("Global error:", event.error);
-      setError(event.error?.message || "Runtime error");
+      const message = event.error?.message || event.message || "Runtime error";
+      console.error("Global error:", message, event.error);
+      
+      // Ignore common benign errors that don't affect functionality
+      if (
+        message.includes('ResizeObserver') || 
+        message.includes('Script error') ||
+        message.includes('play() interrupted') ||
+        message.includes('The play() request was interrupted')
+      ) return;
+      
+      setError(message);
     };
 
     const init = async () => {

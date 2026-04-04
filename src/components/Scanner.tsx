@@ -72,7 +72,17 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
     scannerRef.current = html5QrCode;
 
     const startScanner = async () => {
-      if (isTransitioning.current) return;
+      // Wait for any ongoing transition to finish
+      let attempts = 0;
+      while (isTransitioning.current && attempts < 15) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+        attempts++;
+      }
+
+      if (isTransitioning.current) {
+        console.warn("Scanner: Still transitioning after timeout, forcing start attempt");
+      }
+
       isTransitioning.current = true;
 
       try {
@@ -90,36 +100,61 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
           disableFlip: false
         };
 
+        // Try to start with the requested facingMode
+        if (!isMounted.current) return;
+
+        const devices = await Html5Qrcode.getCameras();
+        let cameraToUse: any = { facingMode: facingMode };
+        
+        if (devices && devices.length > 0) {
+          setHasMultipleCameras(devices.length > 1);
+          
+          // Try to find a camera that matches the requested facingMode by label
+          const targetDevice = devices.find(device => {
+            const label = device.label.toLowerCase();
+            if (facingMode === "user") {
+              return label.includes("front") || label.includes("selfie") || label.includes("user") || label.includes("facing 0");
+            } else {
+              return label.includes("back") || label.includes("rear") || label.includes("environment") || label.includes("facing 1");
+            }
+          });
+          
+          if (targetDevice) {
+            console.log(`Scanner: Found matching camera: ${targetDevice.label} (${targetDevice.id})`);
+            cameraToUse = targetDevice.id;
+          }
+        }
+
+        if (!isMounted.current) return;
+
         await html5QrCode.start(
-          { facingMode: facingMode },
+          cameraToUse,
           config,
           (decodedText) => {
-            if (scannerRef.current?.isScanning && !isProcessingRef.current) {
+            if (scannerRef.current?.isScanning && !isProcessingRef.current && isMounted.current) {
               setIsProcessing(true);
               playScanSound();
-
               onScan(decodedText);
             }
           },
           () => {}
         );
-
-        // Re-check cameras after successful start to ensure we have permissions
-        const devices = await Html5Qrcode.getCameras();
-        if (devices && devices.length > 1) {
-          setHasMultipleCameras(true);
-        }
       } catch (err: any) {
         console.error("Unable to start scanner", err);
+        
+        // Handle permission errors explicitly
         if (err?.name === 'NotAllowedError' || err?.toString().includes('Permission denied')) {
           setPermissionError(t('camera_permission_denied') || "Permiso de cámara denegado. Por favor, actívalo en los ajustes de tu navegador.");
           isTransitioning.current = false;
           return;
         }
+
+        // Fallback to any available camera if the requested one fails
         try {
           if (scannerRef.current) {
+            console.log("Scanner: Attempting fallback start...");
             await html5QrCode.start(
-              { facingMode: "user" },
+              { facingMode: facingMode === "environment" ? "user" : "environment" },
               { fps: 15, qrbox: { width: 250, height: 150 } },
               (decodedText) => {
                 if (scannerRef.current?.isScanning && !isProcessingRef.current) {
@@ -133,6 +168,7 @@ export const Scanner: React.FC<ScannerProps> = ({ onScan, onClose, onReportMissi
           }
         } catch (fallbackErr) {
           console.error("Fallback scanner failed", fallbackErr);
+          setPermissionError(t('camera_error') || "Error de Cámara. Por favor, asegúrate de que tu cámara funciona y recarga la página.");
         }
       } finally {
         isTransitioning.current = false;
