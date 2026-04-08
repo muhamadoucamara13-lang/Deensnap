@@ -40,8 +40,9 @@ const supabaseAdmin = (supabaseUrl && supabaseServiceKey)
     })
   : null;
 
+export const app = express();
+
 async function startServer() {
-  const app = express();
   const PORT = 3000;
 
   // Request Logger
@@ -355,6 +356,40 @@ async function startServer() {
     }
   });
 
+  app.post("/api/create-portal-session", async (req, res) => {
+    const { userId } = req.body;
+    
+    if (!supabaseAdmin) {
+      return res.status(500).json({ error: "Supabase Admin no está configurado." });
+    }
+
+    try {
+      // Find the stripe_customer_id for this user
+      const { data: profile, error: profileError } = await supabaseAdmin
+        .from('profiles')
+        .select('stripe_customer_id')
+        .eq('id', userId)
+        .single();
+
+      if (profileError || !profile?.stripe_customer_id) {
+        return res.status(400).json({ error: "No se encontró un ID de cliente de Stripe para este usuario. Asegúrate de tener una suscripción activa." });
+      }
+
+      const origin = req.headers.origin || process.env.APP_URL || `https://${req.headers.host}`;
+      const stripe = getStripe();
+      
+      const session = await stripe.billingPortal.sessions.create({
+        customer: profile.stripe_customer_id,
+        return_url: `${origin}/`,
+      });
+
+      res.json({ url: session.url });
+    } catch (error: any) {
+      console.error("Stripe Portal Error:", error.message);
+      res.status(500).json({ error: `Error al crear la sesión del portal: ${error.message}` });
+    }
+  });
+
   // Catch-all for /api routes to ensure JSON response
   app.all("/api/*", (req, res) => {
     console.warn(`>>> API Route NOT FOUND: ${req.method} ${req.url}`);
@@ -362,7 +397,7 @@ async function startServer() {
   });
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.NETLIFY) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -376,9 +411,11 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  if (!process.env.NETLIFY) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+    });
+  }
 
   // Global error handler
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -390,4 +427,6 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.NETLIFY) {
+  startServer();
+}

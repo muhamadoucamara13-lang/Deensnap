@@ -7,6 +7,7 @@ interface PremiumScreenProps {
   t: (key: any) => string;
   setScreen: (s: Screen) => void;
   handleCheckout: (plan: 'monthly' | 'yearly') => void;
+  handlePortal: () => void;
   isPremium: boolean;
 }
 
@@ -14,6 +15,7 @@ export const PremiumScreen = React.memo(({
   t, 
   setScreen, 
   handleCheckout,
+  handlePortal,
   isPremium
 }: PremiumScreenProps) => {
   return (
@@ -115,11 +117,20 @@ export const PremiumScreen = React.memo(({
               ))}
             </div>
 
-            <div className="pt-4">
+            <div className="pt-4 space-y-4">
               <div className="text-2xl font-bold font-display tracking-tight text-gold-400">2,99€</div>
               <div className="text-[10px] text-gold-500/40 font-bold mt-1 uppercase tracking-widest">
                 {isPremium ? 'Plan Actual' : 'Desde solo'}
               </div>
+              
+              {isPremium && (
+                <button 
+                  onClick={handlePortal}
+                  className="w-full py-3 rounded-2xl bg-gold-500/10 border border-gold-500/30 text-gold-400 font-bold text-xs hover:bg-gold-500/20 transition-all"
+                >
+                  Gestionar Suscripción
+                </button>
+              )}
             </div>
           </motion.div>
         </div>

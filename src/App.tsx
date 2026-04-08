@@ -576,6 +576,30 @@ export default function App() {
     }
   };
 
+  const handlePortal = async () => {
+    if (!userProfile?.id) return;
+    setLoading(true);
+    setLoadingMessage("Abriendo portal de suscripción...");
+    try {
+      const response = await fetch('/api/create-portal-session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: userProfile.id }),
+      });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error(data.error || "No se pudo abrir el portal");
+      }
+    } catch (error: any) {
+      console.error("Portal error:", error);
+      setError(error.message || "Error al abrir el portal de Stripe");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!userProfile?.id) return;
     setConfirmModal({
@@ -1281,6 +1305,7 @@ export default function App() {
             setTheme={setTheme}
             handleLogout={handleLogout}
             handleDownloadData={handleDownloadData}
+            handlePortal={handlePortal}
           />
         );
 
@@ -1290,6 +1315,7 @@ export default function App() {
             t={t}
             setScreen={setScreen}
             handleCheckout={handleCheckout}
+            handlePortal={handlePortal}
             isPremium={isPremium}
           />
         );

@@ -18,6 +18,7 @@ interface SettingsScreenProps {
   setTheme: (t: string) => void;
   handleLogout: () => void;
   handleDownloadData: () => void;
+  handlePortal: () => void;
 }
 
 export const SettingsScreen = React.memo(({ 
@@ -29,7 +30,8 @@ export const SettingsScreen = React.memo(({
   theme, 
   setTheme, 
   handleLogout, 
-  handleDownloadData 
+  handleDownloadData,
+  handlePortal
 }: SettingsScreenProps) => {
   const { isInstallable, isInstalled, installApp } = usePWA();
 
@@ -80,6 +82,17 @@ export const SettingsScreen = React.memo(({
                   {userProfile?.plan === 'premium' ? 'Miembro Elite' : 'Cuenta Estándar'}
                 </span>
               </div>
+              {userProfile?.plan === 'premium' && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePortal();
+                  }}
+                  className="mt-3 px-4 py-2 rounded-xl bg-gold-500/10 border border-gold-500/20 text-gold-400 text-[10px] font-bold uppercase tracking-widest hover:bg-gold-500/20 transition-all"
+                >
+                  Gestionar Suscripción
+                </button>
+              )}
             </div>
             <ArrowRight size={20} className="text-white/20 group-hover:text-white group-hover:translate-x-1 transition-all" />
           </div>
