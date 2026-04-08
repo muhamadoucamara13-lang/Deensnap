@@ -16,9 +16,8 @@ import {
   Heart
 } from 'lucide-react';
 import { ProductData } from '../services/openFoodFacts';
-import { AnalysisResult } from '../services/gemini';
+import { AnalysisResult, explainIngredient } from '../services/gemini';
 import { cn } from '../lib/utils';
-import { GoogleGenAI } from "@google/genai";
 import { useLanguage } from '../contexts/LanguageContext';
 import { logMeal, toggleFavorite, isFavorite as checkIsFavorite } from '../services/supabase';
 
@@ -95,24 +94,8 @@ export function ResultView({ product, onBack, userProfile }: ResultViewProps) {
     setIngredientInfo(null);
     
     try {
-      const apiKey = typeof process !== 'undefined' && process.env ? process.env.GEMINI_API_KEY : undefined;
-      if (!apiKey) throw new Error("API Key missing");
-      
-      const ai = new GoogleGenAI({ apiKey });
-      const languageNames: Record<string, string> = {
-        es: 'español',
-        en: 'english',
-        fr: 'français',
-        ar: 'arabic'
-      };
-      const targetLang = languageNames[language] || 'español';
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: `Explica brevemente por qué el ingrediente "${ingredient}" puede ser considerado HARAM o DUDOSO en una dieta halal. Sé específico y profesional. Responde en ${targetLang}.`,
-      });
-      
-      setIngredientInfo(response.text || "No se pudo obtener información detallada.");
+      const info = await explainIngredient(ingredient, language);
+      setIngredientInfo(info);
     } catch (error) {
       console.error("Error fetching ingredient details:", error);
       setIngredientInfo("Error al cargar la información. Por favor, inténtalo de nuevo.");

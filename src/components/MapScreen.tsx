@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { findNearbyPlaces as findNearbyPlacesAI } from '../services/gemini';
 import { motion } from 'motion/react';
 import { MapPin, Navigation, Search, Shield, ArrowLeft, ExternalLink, Star, Utensils, Globe } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import { cn } from '../lib/utils';
 import { BottomNav } from './BottomNav';
 import { Screen } from '../types';
@@ -50,44 +50,8 @@ export function MapScreen({ onBack, setScreen, screen }: { onBack: () => void; s
   const fetchNearbyPlaces = async (loc: { lat: number; lng: number }, query?: string) => {
     setLoading(true);
     try {
-      const apiKey = typeof process !== 'undefined' ? process.env.GEMINI_API_KEY : undefined;
-      if (!apiKey) throw new Error("API Key missing");
-      
-      const ai = new GoogleGenAI({ apiKey });
-      const prompt = query 
-        ? `Encuentra 5 lugares relacionados con "${query}" que sean halal cercanos a mi ubicación actual.`
-        : "Encuentra 5 carnicerías, restaurantes o supermercados halal cercanos a mi ubicación actual.";
-
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          tools: [{ googleMaps: {} }],
-          toolConfig: {
-            retrievalConfig: {
-              latLng: {
-                latitude: loc.lat,
-                longitude: loc.lng
-              }
-            }
-          }
-        },
-      });
-
-      const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks) {
-        const mappedPlaces = chunks
-          .filter((chunk: any) => chunk.maps)
-          .map((chunk: any) => ({
-            name: chunk.maps.title || "Lugar Halal",
-            address: chunk.maps.address || "Dirección no disponible",
-            rating: chunk.maps.rating,
-            uri: chunk.maps.uri
-          }));
-        setPlaces(mappedPlaces);
-      } else {
-        setPlaces([]);
-      }
+      const results = await findNearbyPlacesAI(loc.lat, loc.lng, query);
+      setPlaces(results);
     } catch (error) {
       console.error("Error fetching places:", error);
     } finally {
