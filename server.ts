@@ -44,6 +44,12 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  // Request Logger
+  app.use((req, res, next) => {
+    console.log(`>>> ${req.method} ${req.url}`);
+    next();
+  });
+
   // Stripe Webhook (must be before express.json())
   app.post('/api/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -94,16 +100,28 @@ async function startServer() {
         // 2. SUSCRIPCIÓN CREADA
         // -----------------------------
         case 'customer.subscription.created': {
-          if (userId && supabaseAdmin) {
-            console.log(`✔ Premium activado (suscripción creada) para: ${userId}`);
+          let targetUserId = userId;
+          
+          if (!targetUserId && data.customer && supabaseAdmin) {
+            const { data: profile } = await supabaseAdmin
+              .from('profiles')
+              .select('id')
+              .eq('stripe_customer_id', data.customer as string)
+              .single();
+            if (profile) targetUserId = profile.id;
+          }
+
+          if (targetUserId && supabaseAdmin) {
+            console.log(`✔ Premium activado (suscripción creada) para: ${targetUserId}`);
             const { error } = await supabaseAdmin
               .from('profiles')
               .update({ 
                 plan: 'premium',
                 is_premium: true,
-                premium_since: new Date().toISOString()
+                premium_since: new Date().toISOString(),
+                stripe_customer_id: data.customer as string
               })
-              .eq('id', userId);
+              .eq('id', targetUserId);
             
             if (error) throw error;
           }
@@ -114,16 +132,27 @@ async function startServer() {
         // 3. SUSCRIPCIÓN ACTUALIZADA (renovación)
         // -----------------------------
         case 'customer.subscription.updated': {
-          if (userId && supabaseAdmin) {
+          let targetUserId = userId;
+          
+          if (!targetUserId && data.customer && supabaseAdmin) {
+            const { data: profile } = await supabaseAdmin
+              .from('profiles')
+              .select('id')
+              .eq('stripe_customer_id', data.customer as string)
+              .single();
+            if (profile) targetUserId = profile.id;
+          }
+
+          if (targetUserId && supabaseAdmin) {
             if (data.status === 'active') {
-              console.log(`✔ Premium renovado para: ${userId}`);
+              console.log(`✔ Premium renovado para: ${targetUserId}`);
               const { error } = await supabaseAdmin
                 .from('profiles')
                 .update({ 
                   plan: 'premium',
                   is_premium: true 
                 })
-                .eq('id', userId);
+                .eq('id', targetUserId);
               
               if (error) throw error;
             }
@@ -173,15 +202,26 @@ async function startServer() {
         // 5. PAGO DE RENOVACIÓN EXITOSO
         // -----------------------------
         case 'invoice.payment_succeeded': {
-          if (userId && supabaseAdmin) {
-            console.log(`✔ Renovación pagada para: ${userId}`);
+          let targetUserId = userId;
+          
+          if (!targetUserId && data.customer && supabaseAdmin) {
+            const { data: profile } = await supabaseAdmin
+              .from('profiles')
+              .select('id')
+              .eq('stripe_customer_id', data.customer as string)
+              .single();
+            if (profile) targetUserId = profile.id;
+          }
+
+          if (targetUserId && supabaseAdmin) {
+            console.log(`✔ Renovación pagada para: ${targetUserId}`);
             const { error } = await supabaseAdmin
               .from('profiles')
               .update({ 
                 plan: 'premium',
                 is_premium: true 
               })
-              .eq('id', userId);
+              .eq('id', targetUserId);
             
             if (error) throw error;
           }
@@ -192,15 +232,26 @@ async function startServer() {
         // 6. PAGO FALLIDO
         // -----------------------------
         case 'invoice.payment_failed': {
-          if (userId && supabaseAdmin) {
-            console.log(`❌ Pago fallido — Premium desactivado para: ${userId}`);
+          let targetUserId = userId;
+          
+          if (!targetUserId && data.customer && supabaseAdmin) {
+            const { data: profile } = await supabaseAdmin
+              .from('profiles')
+              .select('id')
+              .eq('stripe_customer_id', data.customer as string)
+              .single();
+            if (profile) targetUserId = profile.id;
+          }
+
+          if (targetUserId && supabaseAdmin) {
+            console.log(`❌ Pago fallido — Premium desactivado para: ${targetUserId}`);
             const { error } = await supabaseAdmin
               .from('profiles')
               .update({ 
                 plan: 'free',
                 is_premium: false 
               })
-              .eq('id', userId);
+              .eq('id', targetUserId);
             
             if (error) throw error;
           }
@@ -227,6 +278,7 @@ async function startServer() {
 
   // API Routes
   app.post("/api/create-checkout-session", async (req, res) => {
+    console.log(">>> POST /api/create-checkout-session reached");
     const { userId, userEmail, planType } = req.body;
     
     console.log(`Checkout request: User=${userId}, Email=${userEmail}, Plan=${planType}`);
@@ -303,6 +355,12 @@ async function startServer() {
     }
   });
 
+  // Catch-all for /api routes to ensure JSON response
+  app.all("/api/*", (req, res) => {
+    console.warn(`>>> API Route NOT FOUND: ${req.method} ${req.url}`);
+    res.status(404).json({ error: `Ruta de API no encontrada: ${req.method} ${req.url}` });
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
@@ -320,6 +378,15 @@ async function startServer() {
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
+  });
+
+  // Global error handler
+  app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    console.error(">>> GLOBAL ERROR HANDLER:", err);
+    if (req.path.startsWith('/api')) {
+      return res.status(500).json({ error: "Error interno del servidor en la API" });
+    }
+    next(err);
   });
 }
 

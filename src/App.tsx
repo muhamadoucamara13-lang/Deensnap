@@ -539,7 +539,18 @@ export default function App() {
       });
       
       clearTimeout(timeoutId);
-      const data = await response.json().catch(() => ({ error: "Error parsing response" }));
+      
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        const text = await response.text();
+        console.error("App: Expected JSON (v2), got:", text.substring(0, 100));
+        throw new Error(`[v2] El servidor no respondió con JSON (Status: ${response.status}). Por favor, contacta con soporte.`);
+      }
+
+      const data = await response.json().catch((err) => {
+        console.error("App: JSON parse error (v2):", err);
+        return { error: "[v2] Error al procesar la respuesta del servidor" };
+      });
       
       if (!response.ok || data.error) {
         console.error("App: Checkout session fetch failed:", response.status, data);
@@ -554,7 +565,7 @@ export default function App() {
         throw new Error("No se recibió la URL de pago de Stripe");
       }
     } catch (error: any) {
-      console.error("App: Upgrade error:", error);
+      console.error("App: Upgrade error (v2):", error);
       if (error.name === 'AbortError') {
         setError("La conexión con el servidor ha tardado demasiado. Por favor, inténtalo de nuevo.");
       } else {

@@ -1,3 +1,5 @@
+import { getFromCache, saveToCache } from "../lib/cache";
+
 export interface ProductData {
   barcode: string;
   name: string;
@@ -19,6 +21,13 @@ export interface ProductData {
 }
 
 export async function fetchProductFromOFF(barcode: string, retries = 2): Promise<ProductData | null> {
+  const cacheKey = `off_product_${barcode}`;
+  const cached = getFromCache<ProductData>(cacheKey);
+  if (cached) {
+    console.log("OFF: Product found in cache.");
+    return cached;
+  }
+
   const fetchWithRetry = async (attempt: number): Promise<ProductData | null> => {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000); // Increased to 10 second timeout
@@ -40,7 +49,7 @@ export async function fetchProductFromOFF(barcode: string, retries = 2): Promise
 
       if (data.status === 1) {
         const product = data.product;
-        return {
+        const result = {
           barcode: barcode,
           name: product.product_name || "Producto desconocido",
           ingredients: product.ingredients_text || "",
@@ -51,11 +60,15 @@ export async function fetchProductFromOFF(barcode: string, retries = 2): Promise
           status: data.status,
           nutriments: product.nutriments
         };
+        saveToCache(cacheKey, result);
+        return result;
       }
       
       // Return status 0 if product not found but API call succeeded
       if (data.status === 0) {
-        return { barcode, name: "", ingredients: "", status: 0 };
+        const result = { barcode, name: "", ingredients: "", status: 0 };
+        saveToCache(cacheKey, result, 3600 * 24); // Cache "not found" for 24 hours
+        return result;
       }
       
       return null;

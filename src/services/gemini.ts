@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { getFromCache, saveToCache, generateCacheKey } from "../lib/cache";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
 const GEMINI_SEARCH_MODEL = "gemini-3-flash-preview";
@@ -26,6 +27,13 @@ function getApiKey() {
 }
 
 export async function analyzeIngredients(ingredients: string, productName: string, lang: string = 'es'): Promise<AnalysisResult> {
+  const cacheKey = generateCacheKey('gemini_analysis', `${productName}_${ingredients}_${lang}`);
+  const cached = getFromCache<AnalysisResult>(cacheKey);
+  if (cached) {
+    console.log("Gemini: Analysis found in cache.");
+    return cached;
+  }
+
   const apiKey = getApiKey();
   const ai = new GoogleGenAI({ apiKey });
   
@@ -114,7 +122,9 @@ export async function analyzeIngredients(ingredients: string, productName: strin
     const text = response.text;
     if (!text) throw new Error("Empty response from Gemini");
     
-    return JSON.parse(text) as AnalysisResult;
+    const result = JSON.parse(text) as AnalysisResult;
+    saveToCache(cacheKey, result);
+    return result;
   } catch (error) {
     console.error("Gemini analysis error:", error);
     throw error;
@@ -122,6 +132,13 @@ export async function analyzeIngredients(ingredients: string, productName: strin
 }
 
 export async function searchProductByBarcode(barcode: string): Promise<AnalysisResult & { name: string, ingredients: string } | null> {
+  const cacheKey = `gemini_barcode_${barcode}`;
+  const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
+  if (cached) {
+    console.log("Gemini: Barcode search found in cache.");
+    return cached;
+  }
+
   try {
     const apiKey = getApiKey();
     const ai = new GoogleGenAI({ apiKey });
@@ -189,7 +206,9 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
     
     console.log("Gemini barcode result text:", text);
     try {
-      return JSON.parse(text);
+      const result = JSON.parse(text);
+      saveToCache(cacheKey, result);
+      return result;
     } catch (parseError) {
       console.error("Error parsing Gemini barcode JSON:", parseError);
       throw new Error("Error al procesar la respuesta de la IA.");
@@ -205,6 +224,13 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
 }
 
 export async function searchProductByName(name: string, lang: string = 'es'): Promise<AnalysisResult & { name: string, ingredients: string } | null> {
+  const cacheKey = generateCacheKey('gemini_name_search', `${name}_${lang}`);
+  const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
+  if (cached) {
+    console.log("Gemini: Name search found in cache.");
+    return cached;
+  }
+
   try {
     const apiKey = getApiKey();
     const ai = new GoogleGenAI({ apiKey });
@@ -288,6 +314,7 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
       if (!result.name || !result.status || !result.reason) {
         return null;
       }
+      saveToCache(cacheKey, result);
       return result;
     } catch (parseError) {
       console.error("Error parsing Gemini name search JSON:", parseError);
