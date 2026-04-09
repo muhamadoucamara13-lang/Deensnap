@@ -84,7 +84,7 @@ export async function analyzeIngredients(ingredients: string, productName: strin
       }
     });
 
-    const text = result.text;
+    const text = result.response.text();
     if (!text) throw new Error("Empty response from Gemini");
     
     const res = JSON.parse(text) as AnalysisResult;
@@ -130,7 +130,8 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
       }
     });
 
-    const text = result.text;
+    const text = result.response.text();
+    console.log("DEBUG: Gemini Barcode Search Response:", text);
     if (!text) return null;
     
     const res = JSON.parse(text);
@@ -138,7 +139,7 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
     return res;
   } catch (error) {
     console.error("Gemini search error:", error);
-    return null;
+    throw error; // Throw instead of returning null to see the error in UI
   }
 }
 
@@ -176,7 +177,8 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
       }
     });
 
-    const text = result.text;
+    const text = result.response.text();
+    console.log("DEBUG: Gemini Name Search Response:", text);
     if (!text) return null;
     
     const res = JSON.parse(text);
@@ -184,7 +186,7 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
     return res;
   } catch (error) {
     console.error("Gemini search by name error:", error);
-    return null;
+    throw error; // Throw instead of returning null
   }
 }
 
@@ -205,7 +207,7 @@ export async function explainIngredient(ingredient: string, lang: string = 'es')
       contents: [{ parts: [{ text: prompt }] }]
     });
     
-    return result.text || "No se pudo obtener información detallada.";
+    return result.response.text() || "No se pudo obtener información detallada.";
   } catch (error) {
     console.error("Gemini explain ingredient error:", error);
     return "Error al cargar la información. Por favor, inténtalo de nuevo.";
