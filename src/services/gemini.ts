@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { getFromCache, saveToCache, generateCacheKey } from "../lib/cache";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
-const GEMINI_SEARCH_MODEL = "gemini-3.1-pro-preview";
+const GEMINI_SEARCH_MODEL = "gemini-3-flash-preview";
 
 export interface AnalysisResult {
   status: "HALAL" | "DUDOSO" | "HARAM";
@@ -146,6 +146,9 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
     return res;
   } catch (error: any) {
     console.error("Gemini search error:", error);
+    if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      throw new Error("La IA está saturada en este momento debido a muchas peticiones. Por favor, espera 30 segundos e inténtalo de nuevo.");
+    }
     if (error instanceof SyntaxError) {
       throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
     }
@@ -197,6 +200,9 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
     return res;
   } catch (error: any) {
     console.error("Gemini search by name error:", error);
+    if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      throw new Error("La IA está saturada en este momento. Por favor, espera unos segundos e inténtalo de nuevo.");
+    }
     if (error instanceof SyntaxError) {
       throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
     }
