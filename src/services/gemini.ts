@@ -2,7 +2,7 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { getFromCache, saveToCache, generateCacheKey } from "../lib/cache";
 
 const GEMINI_MODEL = "gemini-3-flash-preview";
-const GEMINI_SEARCH_MODEL = "gemini-3-flash-preview";
+const GEMINI_SEARCH_MODEL = "gemini-3.1-pro-preview";
 
 export interface AnalysisResult {
   status: "HALAL" | "DUDOSO" | "HARAM";
@@ -25,9 +25,11 @@ function getApiKey() {
     envKeys: Object.keys(import.meta.env).filter(k => k.startsWith('VITE_'))
   });
 
-  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  // Try process.env first (AI Studio standard) then import.meta.env (Vite/Vercel standard)
+  const apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || import.meta.env.VITE_GEMINI_API_KEY;
+  
   if (!apiKey) {
-    throw new Error("ERROR_V1.0.1: No se encontró la clave API de Gemini (VITE_GEMINI_API_KEY). Verifica que la variable esté configurada en Vercel con el prefijo VITE_.");
+    throw new Error("ERROR_V1.0.1: No se encontró la clave API de Gemini. Verifica que esté configurada en Vercel (VITE_GEMINI_API_KEY) o en los Secrets de AI Studio.");
   }
   return apiKey;
 }
@@ -53,6 +55,7 @@ export async function analyzeIngredients(ingredients: string, productName: strin
     Esquema: {"status": "HALAL/DUDOSO/HARAM", "reason": "string", "risk_ingredients": [], "confidence": "alta/media/baja", "certification": {"country": "string", "certifier": "string", "reliability": "alta/media/baja"}, "alternatives": []}
   `;
 
+  let text = "";
   try {
     const result = await ai.models.generateContent({
       model: GEMINI_MODEL,
@@ -84,14 +87,17 @@ export async function analyzeIngredients(ingredients: string, productName: strin
       }
     });
 
-    const text = result.response.text();
+    text = result.text || "";
     if (!text) throw new Error("Empty response from Gemini");
     
     const res = JSON.parse(text) as AnalysisResult;
     saveToCache(cacheKey, res);
     return res;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini analysis error:", error);
+    if (error instanceof SyntaxError) {
+      throw new Error(`Error al procesar el análisis: ${error.message}. Respuesta: ${text.substring(0, 50)}`);
+    }
     throw error;
   }
 }
@@ -101,6 +107,7 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
   const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
   if (cached) return cached;
 
+  let text = "";
   try {
     const apiKey = getApiKey();
     const ai = new GoogleGenAI({ apiKey });
@@ -130,16 +137,19 @@ export async function searchProductByBarcode(barcode: string): Promise<AnalysisR
       }
     });
 
-    const text = result.response.text();
+    text = result.text || "";
     console.log("DEBUG: Gemini Barcode Search Response:", text);
-    if (!text) return null;
+    if (!text) throw new Error("No se pudo encontrar información para este código de barras.");
     
     const res = JSON.parse(text);
     saveToCache(cacheKey, res);
     return res;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini search error:", error);
-    throw error; // Throw instead of returning null to see the error in UI
+    if (error instanceof SyntaxError) {
+      throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
+    }
+    throw error;
   }
 }
 
@@ -148,6 +158,7 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
   const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
   if (cached) return cached;
 
+  let text = "";
   try {
     const apiKey = getApiKey();
     const ai = new GoogleGenAI({ apiKey });
@@ -177,16 +188,19 @@ export async function searchProductByName(name: string, lang: string = 'es'): Pr
       }
     });
 
-    const text = result.response.text();
+    text = result.text || "";
     console.log("DEBUG: Gemini Name Search Response:", text);
-    if (!text) return null;
+    if (!text) throw new Error("No se pudo encontrar información para este producto.");
     
     const res = JSON.parse(text);
     saveToCache(cacheKey, res);
     return res;
-  } catch (error) {
+  } catch (error: any) {
     console.error("Gemini search by name error:", error);
-    throw error; // Throw instead of returning null
+    if (error instanceof SyntaxError) {
+      throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
+    }
+    throw error;
   }
 }
 
@@ -207,7 +221,7 @@ export async function explainIngredient(ingredient: string, lang: string = 'es')
       contents: [{ parts: [{ text: prompt }] }]
     });
     
-    return result.response.text() || "No se pudo obtener información detallada.";
+    return result.text || "No se pudo obtener información detallada.";
   } catch (error) {
     console.error("Gemini explain ingredient error:", error);
     return "Error al cargar la información. Por favor, inténtalo de nuevo.";
