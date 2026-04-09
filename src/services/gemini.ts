@@ -1,8 +1,25 @@
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import { getFromCache, saveToCache, generateCacheKey } from "../lib/cache";
 
-const GEMINI_MODEL = "gemini-3-flash-preview";
-const GEMINI_SEARCH_MODEL = "gemini-3-flash-preview";
+const GEMINI_MODEL = "gemini-flash-latest";
+const GEMINI_SEARCH_MODEL = "gemini-flash-latest";
+
+async function withRetry<T>(fn: () => Promise<T>, retries = 3, delay = 2000): Promise<T> {
+  try {
+    return await fn();
+  } catch (error: any) {
+    const isQuotaError = error?.message?.includes('429') || 
+                        error?.message?.includes('RESOURCE_EXHAUSTED') ||
+                        error?.message?.includes('saturada');
+    
+    if (isQuotaError && retries > 0) {
+      console.log(`DEBUG: Quota hit, retrying in ${delay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return withRetry(fn, retries - 1, delay * 1.5);
+    }
+    throw error;
+  }
+}
 
 export interface AnalysisResult {
   status: "HALAL" | "DUDOSO" | "HARAM";
@@ -46,179 +63,185 @@ function getApiKey(): string {
 }
 
 export async function analyzeIngredients(ingredients: string, productName: string, lang: string = 'es'): Promise<AnalysisResult> {
-  const cacheKey = generateCacheKey('gemini_analysis', `${productName}_${ingredients}_${lang}`);
-  const cached = getFromCache<AnalysisResult>(cacheKey);
-  if (cached) return cached;
+  return withRetry(async () => {
+    const cacheKey = generateCacheKey('gemini_analysis', `${productName}_${ingredients}_${lang}`);
+    const cached = getFromCache<AnalysisResult>(cacheKey);
+    if (cached) return cached;
 
-  const apiKey = getApiKey();
-  const ai = new GoogleGenAI({ apiKey });
-  
-  const languageNames: Record<string, string> = {
-    es: 'español', en: 'english', fr: 'français', ar: 'arabic'
-  };
-  const targetLang = languageNames[lang] || 'español';
-
-  const prompt = `
-    Actúa como experto en certificación halal en Europa.
-    Analiza esta lista de ingredientes del producto "${productName}" y responde SOLO en formato JSON.
-    CRÍTICO: Busca sellos oficiales. Explicación en ${targetLang}.
-    Ingredientes: ${ingredients}
-    Esquema: {"status": "HALAL/DUDOSO/HARAM", "reason": "string", "risk_ingredients": [], "confidence": "alta/media/baja", "certification": {"country": "string", "certifier": "string", "reliability": "alta/media/baja"}, "alternatives": []}
-  `;
-
-  let text = "";
-  try {
-    const result = await ai.models.generateContent({
-      model: GEMINI_MODEL,
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0,
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            status: { type: Type.STRING },
-            reason: { type: Type.STRING },
-            risk_ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-            confidence: { type: Type.STRING },
-            certification: {
-              type: Type.OBJECT,
-              properties: {
-                logo: { type: Type.STRING },
-                country: { type: Type.STRING },
-                certifier: { type: Type.STRING },
-                reliability: { type: Type.STRING }
-              },
-              required: ["country", "certifier", "reliability"]
-            },
-            alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["status", "reason", "risk_ingredients", "confidence"]
-        }
-      }
-    });
-
-    text = result.text || "";
-    if (!text) throw new Error("Empty response from Gemini");
+    const apiKey = getApiKey();
+    const ai = new GoogleGenAI({ apiKey });
     
-    const res = JSON.parse(text) as AnalysisResult;
-    saveToCache(cacheKey, res);
-    return res;
-  } catch (error: any) {
-    console.error("Gemini analysis error:", error);
-    if (error instanceof SyntaxError) {
-      throw new Error(`Error al procesar el análisis: ${error.message}. Respuesta: ${text.substring(0, 50)}`);
+    const languageNames: Record<string, string> = {
+      es: 'español', en: 'english', fr: 'français', ar: 'arabic'
+    };
+    const targetLang = languageNames[lang] || 'español';
+
+    const prompt = `
+      Actúa como experto en certificación halal en Europa.
+      Analiza esta lista de ingredientes del producto "${productName}" y responde SOLO en formato JSON.
+      CRÍTICO: Busca sellos oficiales. Explicación en ${targetLang}.
+      Ingredientes: ${ingredients}
+      Esquema: {"status": "HALAL/DUDOSO/HARAM", "reason": "string", "risk_ingredients": [], "confidence": "alta/media/baja", "certification": {"country": "string", "certifier": "string", "reliability": "alta/media/baja"}, "alternatives": []}
+    `;
+
+    let text = "";
+    try {
+      const result = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0,
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              status: { type: Type.STRING },
+              reason: { type: Type.STRING },
+              risk_ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
+              confidence: { type: Type.STRING },
+              certification: {
+                type: Type.OBJECT,
+                properties: {
+                  logo: { type: Type.STRING },
+                  country: { type: Type.STRING },
+                  certifier: { type: Type.STRING },
+                  reliability: { type: Type.STRING }
+                },
+                required: ["country", "certifier", "reliability"]
+              },
+              alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["status", "reason", "risk_ingredients", "confidence"]
+          }
+        }
+      });
+
+      text = result.text || "";
+      if (!text) throw new Error("Empty response from Gemini");
+      
+      const res = JSON.parse(text) as AnalysisResult;
+      saveToCache(cacheKey, res);
+      return res;
+    } catch (error: any) {
+      console.error("Gemini analysis error:", error);
+      if (error instanceof SyntaxError) {
+        throw new Error(`Error al procesar el análisis: ${error.message}. Respuesta: ${text.substring(0, 50)}`);
+      }
+      throw error;
     }
-    throw error;
-  }
+  });
 }
 
 export async function searchProductByBarcode(barcode: string): Promise<AnalysisResult & { name: string, ingredients: string } | null> {
-  const cacheKey = `gemini_barcode_${barcode}`;
-  const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
-  if (cached) return cached;
+  return withRetry(async () => {
+    const cacheKey = `gemini_barcode_${barcode}`;
+    const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
+    if (cached) return cached;
 
-  let text = "";
-  try {
-    const apiKey = getApiKey();
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const prompt = `Busca el producto con código: ${barcode}. Responde JSON con: name, ingredients, status, reason, risk_ingredients, confidence, alternatives.`;
+    let text = "";
+    try {
+      const apiKey = getApiKey();
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const prompt = `Busca el producto con código: ${barcode}. Responde JSON con: name, ingredients, status, reason, risk_ingredients, confidence, alternatives.`;
 
-    const result = await ai.models.generateContent({
-      model: GEMINI_SEARCH_MODEL,
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0,
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            ingredients: { type: Type.STRING },
-            status: { type: Type.STRING },
-            reason: { type: Type.STRING },
-            risk_ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-            confidence: { type: Type.STRING },
-            alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["name", "ingredients", "status", "reason", "risk_ingredients", "confidence"]
+      const result = await ai.models.generateContent({
+        model: GEMINI_SEARCH_MODEL,
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0,
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              ingredients: { type: Type.STRING },
+              status: { type: Type.STRING },
+              reason: { type: Type.STRING },
+              risk_ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
+              confidence: { type: Type.STRING },
+              alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["name", "ingredients", "status", "reason", "risk_ingredients", "confidence"]
+          }
         }
-      }
-    });
+      });
 
-    text = result.text || "";
-    console.log("DEBUG: Gemini Barcode Search Response:", text);
-    if (!text) throw new Error("No se pudo encontrar información para este código de barras.");
-    
-    const res = JSON.parse(text);
-    saveToCache(cacheKey, res);
-    return res;
-  } catch (error: any) {
-    console.error("Gemini search error:", error);
-    if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
-      throw new Error("La IA está saturada en este momento debido a muchas peticiones. Por favor, espera 30 segundos e inténtalo de nuevo.");
+      text = result.text || "";
+      console.log("DEBUG: Gemini Barcode Search Response:", text);
+      if (!text) throw new Error("No se pudo encontrar información para este código de barras.");
+      
+      const res = JSON.parse(text);
+      saveToCache(cacheKey, res);
+      return res;
+    } catch (error: any) {
+      console.error("Gemini search error:", error);
+      if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error("La IA está saturada en este momento debido a muchas peticiones. Por favor, espera 30 segundos e inténtalo de nuevo.");
+      }
+      if (error instanceof SyntaxError) {
+        throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
+      }
+      throw error;
     }
-    if (error instanceof SyntaxError) {
-      throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
-    }
-    throw error;
-  }
+  });
 }
 
 export async function searchProductByName(name: string, lang: string = 'es'): Promise<AnalysisResult & { name: string, ingredients: string } | null> {
-  const cacheKey = generateCacheKey('gemini_name_search', `${name}_${lang}`);
-  const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
-  if (cached) return cached;
+  return withRetry(async () => {
+    const cacheKey = generateCacheKey('gemini_name_search', `${name}_${lang}`);
+    const cached = getFromCache<AnalysisResult & { name: string, ingredients: string }>(cacheKey);
+    if (cached) return cached;
 
-  let text = "";
-  try {
-    const apiKey = getApiKey();
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const prompt = `Busca el producto o categoría: "${name}". Responde JSON con: name, ingredients, status, reason, risk_ingredients, confidence, alternatives. Explicación en ${lang}.`;
+    let text = "";
+    try {
+      const apiKey = getApiKey();
+      const ai = new GoogleGenAI({ apiKey });
+      
+      const prompt = `Busca el producto o categoría: "${name}". Responde JSON con: name, ingredients, status, reason, risk_ingredients, confidence, alternatives. Explicación en ${lang}.`;
 
-    const result = await ai.models.generateContent({
-      model: GEMINI_SEARCH_MODEL,
-      contents: [{ parts: [{ text: prompt }] }],
-      config: {
-        temperature: 0.2,
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            name: { type: Type.STRING },
-            ingredients: { type: Type.STRING },
-            status: { type: Type.STRING },
-            reason: { type: Type.STRING },
-            risk_ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
-            confidence: { type: Type.STRING },
-            alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["name", "ingredients", "status", "reason"]
+      const result = await ai.models.generateContent({
+        model: GEMINI_SEARCH_MODEL,
+        contents: [{ parts: [{ text: prompt }] }],
+        config: {
+          temperature: 0.2,
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              ingredients: { type: Type.STRING },
+              status: { type: Type.STRING },
+              reason: { type: Type.STRING },
+              risk_ingredients: { type: Type.ARRAY, items: { type: Type.STRING } },
+              confidence: { type: Type.STRING },
+              alternatives: { type: Type.ARRAY, items: { type: Type.STRING } }
+            },
+            required: ["name", "ingredients", "status", "reason"]
+          }
         }
-      }
-    });
+      });
 
-    text = result.text || "";
-    console.log("DEBUG: Gemini Name Search Response:", text);
-    if (!text) throw new Error("No se pudo encontrar información para este producto.");
-    
-    const res = JSON.parse(text);
-    saveToCache(cacheKey, res);
-    return res;
-  } catch (error: any) {
-    console.error("Gemini search by name error:", error);
-    if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
-      throw new Error("La IA está saturada en este momento. Por favor, espera unos segundos e inténtalo de nuevo.");
+      text = result.text || "";
+      console.log("DEBUG: Gemini Name Search Response:", text);
+      if (!text) throw new Error("No se pudo encontrar información para este producto.");
+      
+      const res = JSON.parse(text);
+      saveToCache(cacheKey, res);
+      return res;
+    } catch (error: any) {
+      console.error("Gemini search by name error:", error);
+      if (error?.message?.includes('429') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+        throw new Error("La IA está saturada en este momento. Por favor, espera unos segundos e inténtalo de nuevo.");
+      }
+      if (error instanceof SyntaxError) {
+        throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
+      }
+      throw error;
     }
-    if (error instanceof SyntaxError) {
-      throw new Error(`Error al procesar la respuesta de la IA: ${error.message}. Respuesta recibida: ${text.substring(0, 100)}...`);
-    }
-    throw error;
-  }
+  });
 }
 
 export async function explainIngredient(ingredient: string, lang: string = 'es'): Promise<string> {
