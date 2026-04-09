@@ -18,18 +18,29 @@ export interface AnalysisResult {
   alternatives?: string[];
 }
 
-function getApiKey() {
-  // Debug log to verify environment variables in browser
-  console.log("DEBUG: Checking Env Vars...", {
-    hasViteKey: !!import.meta.env.VITE_GEMINI_API_KEY,
-    envKeys: Object.keys(import.meta.env).filter(k => k.startsWith('VITE_'))
+function getApiKey(): string {
+  // Debug log to help the user diagnose environment issues in production
+  const env = import.meta.env;
+  console.log("DEBUG: Environment Check", {
+    hasViteKey: !!env.VITE_GEMINI_API_KEY,
+    allViteKeys: Object.keys(env).filter(k => k.startsWith('VITE_'))
   });
 
-  // Try process.env first (AI Studio standard) then import.meta.env (Vite/Vercel standard)
-  const apiKey = (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) || import.meta.env.VITE_GEMINI_API_KEY;
+  // 1. Try Vite standard (Vercel/Netlify)
+  let apiKey = env.VITE_GEMINI_API_KEY;
   
+  // 2. Try process.env fallback (AI Studio Preview)
+  if (!apiKey && typeof process !== 'undefined') {
+    apiKey = (process.env as any)?.GEMINI_API_KEY || (process.env as any)?.VITE_GEMINI_API_KEY;
+  }
+
+  // 3. Try global window fallback (some edge cases)
+  if (!apiKey && typeof window !== 'undefined') {
+    apiKey = (window as any).GEMINI_API_KEY || (window as any).VITE_GEMINI_API_KEY;
+  }
+
   if (!apiKey) {
-    throw new Error("ERROR_V1.0.1: No se encontró la clave API de Gemini. Verifica que esté configurada en Vercel (VITE_GEMINI_API_KEY) o en los Secrets de AI Studio.");
+    throw new Error("ERROR_V1.0.2: No se encontró la clave API de Gemini. Asegúrate de haber añadido 'VITE_GEMINI_API_KEY' en los Environment Variables de Vercel y haber hecho un nuevo 'Redeploy'.");
   }
   return apiKey;
 }
