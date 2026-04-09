@@ -27,7 +27,7 @@ function getApiKey() {
 
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("No se encontró la clave API de Gemini (VITE_GEMINI_API_KEY). Verifica la configuración en Vercel.");
+    throw new Error("ERROR_V1.0.1: No se encontró la clave API de Gemini (VITE_GEMINI_API_KEY). Verifica que la variable esté configurada en Vercel con el prefijo VITE_.");
   }
   return apiKey;
 }
